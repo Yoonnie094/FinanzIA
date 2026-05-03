@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useChat } from '@ai-sdk/react'
 import { DefaultChatTransport } from 'ai'
+import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { 
@@ -31,9 +32,14 @@ export function FloatingChat() {
   const [isOpen, setIsOpen] = useState(false)
   const [input, setInput] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const router = useRouter()
   
   const { messages, sendMessage, status } = useChat({
     transport: new DefaultChatTransport({ api: '/api/chat' }),
+    onFinish: () => {
+      // Recarga los datos de la pagina (ej. el Dashboard) cuando la IA termina de hablar
+      router.refresh()
+    }
   })
 
   const isLoading = status === 'streaming' || status === 'submitted'
