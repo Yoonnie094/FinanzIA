@@ -158,7 +158,7 @@ export function FloatingChat() {
           ) : (
             <div className="space-y-3">
               {messages.map((message) => {
-                const text = getUIMessageText(message)
+                const text = getUIMessageText(message) || (message as any).content || ''
                 const isUser = message.role === 'user'
 
                 const toolInvocations = message.parts?.filter(
