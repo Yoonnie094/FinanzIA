@@ -26,29 +26,33 @@ function getHealthStatus(income: number, expenses: number): { status: HealthStat
   } else if (margin >= 0) {
     return { status: 'warning', percentage: margin, message: 'Rentabilidad ajustada' }
   } else {
-    return { status: 'critical', percentage: margin, message: 'Operando con perdidas' }
+    return { status: 'critical', percentage: margin, message: 'Operando con pérdidas' }
   }
 }
 
-const statusConfig: Record<HealthStatus, { color: string; bg: string; icon: typeof Activity }> = {
+const statusConfig: Record<HealthStatus, { color: string; bg: string; bar: string; icon: typeof Activity }> = {
   excellent: { 
-    color: 'text-[oklch(0.6_0.18_250)]', 
-    bg: 'bg-[oklch(0.6_0.18_250)]/10',
+    color: 'text-success', 
+    bg: 'bg-success/10',
+    bar: 'bg-success',
     icon: TrendingUp 
   },
   good: { 
-    color: 'text-[oklch(0.55_0.22_280)]', 
-    bg: 'bg-[oklch(0.55_0.22_280)]/10',
+    color: 'text-primary', 
+    bg: 'bg-primary/10',
+    bar: 'bg-primary',
     icon: TrendingUp 
   },
   warning: { 
-    color: 'text-[oklch(0.7_0.15_80)]', 
-    bg: 'bg-[oklch(0.7_0.15_80)]/10',
+    color: 'text-warning', 
+    bg: 'bg-warning/10',
+    bar: 'bg-warning',
     icon: AlertTriangle 
   },
   critical: { 
-    color: 'text-[oklch(0.55_0.2_25)]', 
-    bg: 'bg-[oklch(0.55_0.2_25)]/10',
+    color: 'text-destructive', 
+    bg: 'bg-destructive/10',
+    bar: 'bg-destructive',
     icon: TrendingDown 
   },
 }
@@ -91,7 +95,7 @@ export function BusinessHealth({ monthlyIncome, monthlyExpenses }: BusinessHealt
           </div>
           <div className="text-right">
             <p className="text-sm text-muted-foreground">Utilidad del mes</p>
-            <p className={cn('text-lg font-bold', monthlyIncome - monthlyExpenses >= 0 ? 'text-[oklch(0.6_0.18_250)]' : 'text-[oklch(0.55_0.2_25)]')}>
+            <p className={cn('text-lg font-bold', monthlyIncome - monthlyExpenses >= 0 ? 'text-success' : 'text-destructive')}>
               {formatCurrency(monthlyIncome - monthlyExpenses)}
             </p>
           </div>
@@ -105,13 +109,7 @@ export function BusinessHealth({ monthlyIncome, monthlyExpenses }: BusinessHealt
           </div>
           <div className="h-2 w-full rounded-full bg-secondary">
             <div 
-              className={cn(
-                'h-full rounded-full transition-all',
-                status === 'excellent' ? 'bg-[oklch(0.6_0.18_250)]' :
-                status === 'good' ? 'bg-[oklch(0.55_0.22_280)]' :
-                status === 'warning' ? 'bg-[oklch(0.7_0.15_80)]' :
-                'bg-[oklch(0.55_0.2_25)]'
-              )}
+              className={cn('h-full rounded-full transition-all', config.bar)}
               style={{ width: `${Math.min(Math.max(percentage + 50, 0), 100)}%` }}
             />
           </div>

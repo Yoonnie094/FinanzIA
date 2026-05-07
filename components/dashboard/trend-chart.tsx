@@ -16,6 +16,9 @@ interface TrendChartProps {
   data: MonthlyTrend[]
 }
 
+const INCOME_COLOR = 'oklch(0.6 0.18 250)'   // success
+const EXPENSE_COLOR = 'oklch(0.7 0.18 340)'  // accent
+
 export function TrendChart({ data }: TrendChartProps) {
   const formatCurrency = (value: number) => {
     if (value >= 1000000) {
@@ -57,17 +60,17 @@ export function TrendChart({ data }: TrendChartProps) {
         <div className="h-[200px] w-full">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={data} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.92 0.01 280)" />
+              <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
               <XAxis
                 dataKey="month"
-                tick={{ fill: 'oklch(0.5 0.02 280)', fontSize: 12 }}
-                axisLine={{ stroke: 'oklch(0.92 0.01 280)' }}
+                tick={{ fill: 'currentColor', fontSize: 12, opacity: 0.6 }}
+                axisLine={false}
                 tickLine={false}
               />
               <YAxis
                 tickFormatter={formatCurrency}
-                tick={{ fill: 'oklch(0.5 0.02 280)', fontSize: 12 }}
-                axisLine={{ stroke: 'oklch(0.92 0.01 280)' }}
+                tick={{ fill: 'currentColor', fontSize: 12, opacity: 0.6 }}
+                axisLine={false}
                 tickLine={false}
               />
               <Tooltip
@@ -76,22 +79,23 @@ export function TrendChart({ data }: TrendChartProps) {
                   name === 'income' ? 'Ingresos' : 'Gastos',
                 ]}
                 contentStyle={{
-                  backgroundColor: 'oklch(1 0 0)',
-                  border: '1px solid oklch(0.92 0.01 280)',
+                  backgroundColor: 'hsl(var(--card))',
+                  border: '1px solid hsl(var(--border))',
                   borderRadius: '12px',
-                  color: 'oklch(0.2 0.02 280)',
+                  color: 'hsl(var(--foreground))',
                   boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
                 }}
+                cursor={{ fill: 'hsl(var(--secondary))' }}
               />
               <Bar
                 dataKey="income"
-                fill="oklch(0.6 0.18 250)"
+                fill={INCOME_COLOR}
                 radius={[6, 6, 0, 0]}
                 name="Ingresos"
               />
               <Bar
                 dataKey="expenses"
-                fill="oklch(0.7 0.18 340)"
+                fill={EXPENSE_COLOR}
                 radius={[6, 6, 0, 0]}
                 name="Gastos"
               />
@@ -100,11 +104,11 @@ export function TrendChart({ data }: TrendChartProps) {
         </div>
         <div className="mt-4 flex items-center justify-center gap-6">
           <div className="flex items-center gap-2">
-            <div className="h-3 w-3 rounded-full" style={{ backgroundColor: 'oklch(0.6 0.18 250)' }} />
+            <div className="h-3 w-3 rounded-full" style={{ backgroundColor: INCOME_COLOR }} />
             <span className="text-sm text-muted-foreground">Ingresos</span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="h-3 w-3 rounded-full" style={{ backgroundColor: 'oklch(0.7 0.18 340)' }} />
+            <div className="h-3 w-3 rounded-full" style={{ backgroundColor: EXPENSE_COLOR }} />
             <span className="text-sm text-muted-foreground">Gastos</span>
           </div>
         </div>

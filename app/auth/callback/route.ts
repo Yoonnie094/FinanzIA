@@ -1,44 +1,29 @@
 import { createClient } from '@/lib/supabase/server'
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 
-export async function GET(request: NextRequest) {
-  const { searchParams, origin } = request.nextUrl
+export async function GET(request: Request) {
+  const { searchParams, origin } = new URL(request.url)
   const code = searchParams.get('code')
+  // El "next" es opcional, sirve para saber a dónde redirigir después del login
+  const next = searchParams.get('next') ?? '/dashboard'
 
   if (code) {
     const supabase = await createClient()
-    const { error } = await supabase.auth.exchangeCodeForSession(code)
+    const { error, data } = await supabase.auth.exchangeCodeForSession(code)
     
-    if (!error) {
-      // Check if user has completed onboarding
-      const { data: { user } } = await supabase.auth.getUser()
-      
-      if (user) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('id')
-          .eq('id', user.id)
-          .single()
+    if (!error && data.user) {
+      // Si el usuario es nuevo y no tiene negocio, mandarlo al onboarding
+      const { data: business } = await supabase
+        .from('businesses')
+        .select('id')
+        .eq('user_id', data.user.id)
+        .single()
 
-        const { data: business } = await supabase
-          .from('businesses')
-          .select('id')
-          .eq('user_id', user.id)
-          .single()
-
-        // Redirect to onboarding if profile or business is missing
-        if (!profile) {
-          return NextResponse.redirect(`${origin}/onboarding/personal`)
-        }
-        
-        if (!business) {
-          return NextResponse.redirect(`${origin}/onboarding/business`)
-        }
-      }
-      
-      return NextResponse.redirect(`${origin}/dashboard`)
+      const forwardTo = business ? next : '/onboarding/business'
+      return NextResponse.redirect(`${origin}${forwardTo}`)
     }
   }
 
-  return NextResponse.redirect(`${origin}/auth/error`)
+  // Si algo falla, volver al login con un error
+  return NextResponse.redirect(`${origin}/auth/login?error=auth-callback-failed`)
 }

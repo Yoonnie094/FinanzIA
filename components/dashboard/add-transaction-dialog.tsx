@@ -38,6 +38,7 @@ const CATEGORIES = [
 export function AddTransactionDialog() {
   const [open, setOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [errors, setErrors] = useState<Record<string, string>>({})
   const [formData, setFormData] = useState({
     concept: '',
     amount: '',
@@ -46,8 +47,26 @@ export function AddTransactionDialog() {
   })
   const router = useRouter()
 
+  const validate = () => {
+    const newErrors: Record<string, string> = {}
+    if (!formData.concept.trim()) newErrors.concept = 'El concepto es requerido'
+    else if (formData.concept.length > 100) newErrors.concept = 'Máximo 100 caracteres'
+    const amount = parseFloat(formData.amount)
+    if (!formData.amount) newErrors.amount = 'El monto es requerido'
+    else if (isNaN(amount) || amount < 1) newErrors.amount = 'El monto debe ser mayor a $1'
+    else if (amount > 100000000) newErrors.amount = 'El monto no puede superar $100.000.000'
+    if (!formData.category) newErrors.category = 'Selecciona una categoría'
+    return newErrors
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    const validationErrors = validate()
+    if (Object.keys(validationErrors).length > 0) {
+      setErrors(validationErrors)
+      return
+    }
+    setErrors({})
     setIsLoading(true)
 
     try {
@@ -121,17 +140,23 @@ export function AddTransactionDialog() {
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="concept" className="text-foreground">Concepto</Label>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="concept" className="text-foreground">Concepto</Label>
+              <span className={`text-xs ${formData.concept.length > 90 ? 'text-destructive' : 'text-muted-foreground'}`}>
+                {formData.concept.length}/100
+              </span>
+            </div>
             <Input
               id="concept"
               placeholder="Ej: Compra de harina"
               value={formData.concept}
-              onChange={(e) =>
-                setFormData({ ...formData, concept: e.target.value })
-              }
-              required
-              className="bg-secondary/50 border-border"
+              onChange={(e) => {
+                if (e.target.value.length <= 100) setFormData({ ...formData, concept: e.target.value })
+              }}
+              maxLength={100}
+              className={`bg-secondary/50 ${errors.concept ? 'border-destructive' : 'border-border'}`}
             />
+            {errors.concept && <p className="text-xs text-destructive">{errors.concept}</p>}
           </div>
 
           <div className="grid gap-2">
@@ -141,25 +166,25 @@ export function AddTransactionDialog() {
               type="number"
               placeholder="Ej: 25000"
               value={formData.amount}
-              onChange={(e) =>
-                setFormData({ ...formData, amount: e.target.value })
-              }
-              required
+              onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
               min="1"
-              className="bg-secondary/50 border-border"
+              max="100000000"
+              className={`bg-secondary/50 ${errors.amount ? 'border-destructive' : 'border-border'}`}
             />
+            {errors.amount && <p className="text-xs text-destructive">{errors.amount}</p>}
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="category" className="text-foreground">Categoria</Label>
+            <Label htmlFor="category" className="text-foreground">Categoría</Label>
             <Select
               value={formData.category}
-              onValueChange={(value) =>
+              onValueChange={(value) => {
                 setFormData({ ...formData, category: value })
-              }
+                if (errors.category) setErrors(prev => ({ ...prev, category: '' }))
+              }}
             >
-              <SelectTrigger className="bg-secondary/50 border-border">
-                <SelectValue placeholder="Selecciona una categoria" />
+              <SelectTrigger className={`bg-secondary/50 ${errors.category ? 'border-destructive' : 'border-border'}`}>
+                <SelectValue placeholder="Selecciona una categoría" />
               </SelectTrigger>
               <SelectContent>
                 {CATEGORIES.map((cat) => (
@@ -169,13 +194,14 @@ export function AddTransactionDialog() {
                 ))}
               </SelectContent>
             </Select>
+            {errors.category && <p className="text-xs text-destructive">{errors.category}</p>}
           </div>
 
           <div className="flex justify-end gap-2 pt-4">
             <Button
               type="button"
               variant="outline"
-              onClick={() => setOpen(false)}
+              onClick={() => { setOpen(false); setErrors({}) }}
               className="border-border"
             >
               Cancelar

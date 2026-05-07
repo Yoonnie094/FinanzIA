@@ -33,9 +33,10 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
-  // Redirect to login if accessing dashboard without auth
+  // Redirect to login if accessing protected routes without auth
   if (
-    request.nextUrl.pathname.startsWith('/dashboard') &&
+    (request.nextUrl.pathname.startsWith('/dashboard') ||
+      request.nextUrl.pathname.startsWith('/onboarding')) &&
     !user
   ) {
     const url = request.nextUrl.clone()

@@ -7,7 +7,10 @@ import { RecentTransactions } from '@/components/dashboard/recent-transactions'
 import { BusinessHealth } from '@/components/dashboard/business-health'
 import { FormalityRoute } from '@/components/dashboard/formality-route'
 import { AccountantModule } from '@/components/dashboard/accountant-module'
-import { Wallet, TrendingUp, TrendingDown, PiggyBank } from 'lucide-react'
+import { OnboardingTutorial } from '@/components/dashboard/onboarding-tutorial'
+import { FinancialGoals } from '@/components/dashboard/financial-goals'
+import { Wallet, TrendingUp, TrendingDown } from 'lucide-react'
+import { Suspense } from 'react'
 import type { Transaction, CategoryBreakdown, MonthlyTrend } from '@/lib/types'
 
 async function getTransactions(): Promise<Transaction[]> {
@@ -16,6 +19,7 @@ async function getTransactions(): Promise<Transaction[]> {
     .from('transactions')
     .select('*')
     .order('date', { ascending: false })
+    .limit(200) // Limitar para performance
 
   if (error) {
     console.error('Error fetching transactions:', error)
@@ -136,6 +140,22 @@ export default async function DashboardPage() {
   const summary = calculateSummary(transactions)
   const categoryBreakdown = getCategoryBreakdown(transactions)
   const monthlyTrend = getMonthlyTrend(transactions)
+  const isNewUser = transactions.length === 0
+
+  // Si es usuario nuevo, mostrar tutorial de onboarding
+  if (isNewUser) {
+    return (
+      <div className="mx-auto max-w-7xl px-4 py-6 md:px-6">
+        <div className="mb-8">
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">Panel de Control</h1>
+          <p className="text-sm text-muted-foreground">
+            ¡Bienvenido a FinanzIA!
+          </p>
+        </div>
+        <OnboardingTutorial />
+      </div>
+    )
+  }
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-6 md:px-6">
@@ -166,32 +186,51 @@ export default async function DashboardPage() {
           icon={TrendingDown}
           variant="expense"
         />
-        <SavingsCard totalBalance={summary.balance} />
+        <StatsCard
+          title="Metas Activas"
+          value="2"
+          subtitle="En progreso"
+          icon={Wallet}
+          variant="default"
+        />
       </div>
 
       {/* Business Health */}
       <div className="mb-8">
-        <BusinessHealth 
-          monthlyIncome={summary.monthlyIncome} 
-          monthlyExpenses={summary.monthlyExpenses} 
-        />
+        <Suspense fallback={<div className="h-24 animate-pulse rounded-xl bg-muted" />}>
+          <BusinessHealth 
+            monthlyIncome={summary.monthlyIncome} 
+            monthlyExpenses={summary.monthlyExpenses} 
+          />
+        </Suspense>
       </div>
 
       {/* Charts */}
       <div className="mb-8 grid gap-5 md:grid-cols-2">
-        <ExpenseChart data={categoryBreakdown} />
-        <TrendChart data={monthlyTrend} />
+        <Suspense fallback={<div className="h-64 animate-pulse rounded-xl bg-muted" />}>
+          <ExpenseChart data={categoryBreakdown} />
+        </Suspense>
+        <Suspense fallback={<div className="h-64 animate-pulse rounded-xl bg-muted" />}>
+          <TrendChart data={monthlyTrend} />
+        </Suspense>
       </div>
 
       {/* Recent Transactions and Accountant Module */}
-      <div className="mb-8 grid gap-5 lg:grid-cols-2">
-        <RecentTransactions transactions={transactions} />
-        <AccountantModule 
-          monthlyIncome={summary.monthlyIncome}
-          monthlyExpenses={summary.monthlyExpenses}
-          totalTransactions={transactions.length}
-          transactions={transactions}
-        />
+      <div className="mb-8 grid gap-5 lg:grid-cols-3">
+        <div className="lg:col-span-1">
+           <FinancialGoals />
+        </div>
+        <Suspense fallback={<div className="h-64 animate-pulse rounded-xl bg-muted lg:col-span-1" />}>
+          <RecentTransactions transactions={transactions} />
+        </Suspense>
+        <Suspense fallback={<div className="h-64 animate-pulse rounded-xl bg-muted lg:col-span-1" />}>
+          <AccountantModule 
+            monthlyIncome={summary.monthlyIncome}
+            monthlyExpenses={summary.monthlyExpenses}
+            totalTransactions={transactions.length}
+            transactions={transactions}
+          />
+        </Suspense>
       </div>
 
       {/* Formality Route */}

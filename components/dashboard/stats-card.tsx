@@ -25,17 +25,10 @@ export function StatsCard({
   action,
 }: StatsCardProps) {
   const gradientStyles = {
-    default: 'bg-gradient-to-br from-[oklch(0.55_0.22_280)] to-[oklch(0.5_0.18_250)]',
-    income: 'bg-gradient-to-br from-[oklch(0.6_0.18_250)] to-[oklch(0.55_0.22_280)]',
-    expense: 'bg-gradient-to-br from-[oklch(0.7_0.18_340)] to-[oklch(0.65_0.2_310)]',
-    savings: 'bg-gradient-to-br from-[oklch(0.55_0.22_280)] to-[oklch(0.7_0.18_340)]',
-  }
-
-  const iconStyles = {
-    default: 'bg-white/20 text-white',
-    income: 'bg-white/20 text-white',
-    expense: 'bg-white/20 text-white',
-    savings: 'bg-white/20 text-white',
+    default: 'bg-gradient-to-br from-primary to-primary/70',
+    income: 'bg-gradient-to-br from-success to-primary',
+    expense: 'bg-gradient-to-br from-accent to-accent/70',
+    savings: 'bg-gradient-to-br from-primary to-accent',
   }
 
   return (
@@ -62,11 +55,8 @@ export function StatsCard({
           </div>
           <div className="flex items-center gap-2">
             {action && <div>{action}</div>}
-            <div className={cn(
-              'flex h-11 w-11 items-center justify-center rounded-xl',
-              iconStyles[variant]
-            )}>
-              <Icon className="h-5 w-5" />
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/20">
+              <Icon className="h-5 w-5 text-white" />
             </div>
           </div>
         </div>

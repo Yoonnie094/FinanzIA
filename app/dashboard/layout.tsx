@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { DashboardNav } from '@/components/dashboard/dashboard-nav'
 import { FloatingChat } from '@/components/dashboard/floating-chat'
+import { StockAlertNotifier } from '@/components/dashboard/stock-alert-notifier'
 
 export default async function DashboardLayout({
   children,
@@ -15,17 +16,7 @@ export default async function DashboardLayout({
     redirect('/auth/login')
   }
 
-  // Check if user has completed onboarding
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('id')
-    .eq('id', user.id)
-    .single()
-
-  if (!profile) {
-    redirect('/onboarding/personal')
-  }
-
+  // Si no tiene negocio, completar onboarding
   const { data: business } = await supabase
     .from('businesses')
     .select('id')
@@ -43,6 +34,7 @@ export default async function DashboardLayout({
         {children}
       </main>
       <FloatingChat />
+      <StockAlertNotifier />
     </div>
   )
 }
