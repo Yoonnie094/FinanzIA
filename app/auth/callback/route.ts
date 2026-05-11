@@ -19,8 +19,8 @@ export async function GET(request: Request) {
         .eq('user_id', data.user.id)
         .single()
 
-      const forwardTo = business ? next : '/onboarding/business'
-      return NextResponse.redirect(`${origin}${forwardTo}`)
+      // Redirigir a la página de éxito de verificación
+      return NextResponse.redirect(`${origin}/auth/verified`)
     }
   }
 

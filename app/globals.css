@@ -82,6 +82,49 @@
   --warning-foreground: oklch(0.14 0.025 280);
 }
 
+/* Category-based Themes */
+.theme-tecnologia {
+  --primary: oklch(0.6 0.2 250); /* Cyan-Blue */
+  --accent: oklch(0.65 0.18 280);
+  --ring: oklch(0.6 0.2 250);
+}
+
+.theme-alimentos {
+  --primary: oklch(0.65 0.2 45); /* Orange-Red */
+  --accent: oklch(0.75 0.18 70);
+  --ring: oklch(0.65 0.2 45);
+}
+
+.theme-agricultura {
+  --primary: oklch(0.6 0.15 145); /* Green */
+  --accent: oklch(0.7 0.12 160);
+  --ring: oklch(0.6 0.15 145);
+}
+
+.theme-belleza {
+  --primary: oklch(0.65 0.18 330); /* Pink-Rose */
+  --accent: oklch(0.75 0.15 310);
+  --ring: oklch(0.65 0.18 330);
+}
+
+.theme-artesania {
+  --primary: oklch(0.55 0.15 50); /* Brown-Terracotta */
+  --accent: oklch(0.65 0.12 70);
+  --ring: oklch(0.55 0.15 50);
+}
+
+.theme-ropa {
+  --primary: oklch(0.6 0.18 300); /* Purple */
+  --accent: oklch(0.7 0.14 280);
+  --ring: oklch(0.6 0.18 300);
+}
+
+.theme-construccion {
+  --primary: oklch(0.75 0.15 90); /* Yellow-Amber */
+  --accent: oklch(0.6 0.1 80);
+  --ring: oklch(0.75 0.15 90);
+}
+
 @theme inline {
   --font-sans: 'Geist', 'Geist Fallback';
   --font-mono: 'Geist Mono', 'Geist Mono Fallback';
@@ -129,9 +172,47 @@
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    border-color: var(--border);
+    outline-color: color-mix(in srgb, var(--ring) 50%, transparent);
   }
   body {
-    @apply bg-background text-foreground;
+    background-color: var(--background);
+    color: var(--foreground);
+  }
+}
+
+@layer utilities {
+  .glass {
+    background-color: color-mix(in srgb, var(--card) 40%, transparent);
+    backdrop-filter: blur(24px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+  }
+  
+  .glass-dark {
+    background-color: rgba(0, 0, 0, 0.2);
+    backdrop-filter: blur(24px);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.5);
+  }
+
+  .premium-gradient {
+    background: linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%);
+  }
+
+  .text-gradient {
+    background-clip: text;
+    -webkit-background-clip: text;
+    color: transparent;
+    background-image: linear-gradient(to right, var(--primary), var(--accent));
+  }
+
+  .animate-slow-spin {
+    animation: spin 8s linear infinite;
+  }
+
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
   }
 }

@@ -77,6 +77,7 @@ export default function SignUpPage() {
     }
   }
 
+
   return (
     <div className="relative flex min-h-svh w-full items-center justify-center bg-background p-6 md:p-10">
       <div className="absolute right-4 top-4">
