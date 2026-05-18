@@ -36,7 +36,7 @@ export function FloatingChat() {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const router = useRouter()
   
-  const { messages, sendMessage, status } = useChat({
+  const { messages, setMessages, sendMessage, status, error } = useChat({
     transport: new DefaultChatTransport({ api: '/api/chat' }),
     onFinish: () => {
       // Recarga los datos de la pagina (ej. el Dashboard) cuando la IA termina de hablar
@@ -46,12 +46,30 @@ export function FloatingChat() {
       {
         id: 'welcome',
         role: 'assistant',
-        content: '¡Hola! Soy tu asistente de FinanzIA. 👋\n\n¿En qué puedo ayudarte hoy? Puedes decirme algo como "Vendí 3 tortas" o preguntarme por el resumen de tus gastos.',
+        content: '¡Hola! Qué gusto saludarte. Soy Yoonnie, tu asistente de FinanzIA. 👋\n\n¡Hoy será un gran día para tu negocio! ¿En qué te puedo ayudar hoy? Puedes decirme algo como "Vendí 3 tortas" o preguntarme por el resumen de tus gastos.',
       }
     ]
   } as any)
 
   const isLoading = status === 'streaming' || status === 'submitted'
+
+  useEffect(() => {
+    fetch('/api/chat/history')
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data) && data.length > 0) {
+          setMessages([
+            {
+              id: 'welcome',
+              role: 'assistant',
+              content: '¡Hola! Qué gusto saludarte. Soy Yoonnie, tu asistente de FinanzIA. 👋\n\n¡Hoy será un gran día para tu negocio! ¿En qué te puedo ayudar hoy? Puedes decirme algo como "Vendí 3 tortas" o preguntarme por el resumen de tus gastos.',
+            },
+            ...data
+          ])
+        }
+      })
+      .catch(err => console.error('Error fetching chat history:', err))
+  }, [setMessages])
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -271,6 +289,14 @@ export function FloatingChat() {
                   </div>
                 </div>
               )}
+
+              {error && (
+                <div className="flex gap-2 justify-center">
+                  <div className="rounded-2xl bg-destructive/10 px-3 py-2 border border-destructive/20 text-center">
+                    <span className="text-xs text-destructive font-medium">Error: No se pudo conectar con la IA.</span>
+                  </div>
+                </div>
+              )}
               
               <div ref={messagesEndRef} />
             </div>
@@ -305,9 +331,10 @@ export function FloatingChat() {
               <Send className="h-4 w-4" />
             </Button>
           </form>
-          <p className="mt-2 text-center text-[9px] text-muted-foreground">
-            Presiona <span className="font-bold">Enter</span> para enviar
-          </p>
+          <div className="mt-2 text-center text-[9px] text-muted-foreground">
+            <p>Presiona <span className="font-bold">Enter</span> para enviar.</p>
+            <p className="mt-0.5 text-[8px] opacity-80">FinanzIA puede cometer errores. Verifica las transacciones registradas.</p>
+          </div>
         </div>
       </div>
     </>

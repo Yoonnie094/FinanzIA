@@ -1,6 +1,8 @@
 import { createClient } from '@/lib/supabase/server'
 import { groq } from '@ai-sdk/groq'
-import { generateText } from 'ai'
+import { generateObject } from 'ai'
+import { z } from 'zod'
+import { createHash } from 'crypto'
 
 export const maxDuration = 30
 
@@ -39,39 +41,68 @@ export async function GET() {
     })
   }
 
-  // 2. Procesar datos básicos para el prompt
+  // 2. Validar caché
+  const hashInput = JSON.stringify(transactions.map(t => t.id + t.amount + t.date)) + JSON.stringify(goals)
+  const transactionsHash = createHash('sha256').update(hashInput).digest('hex')
+
+  const { data: cache } = await supabase
+    .from('insights_cache')
+    .select('*')
+    .eq('user_id', user.id)
+    .eq('transactions_hash', transactionsHash)
+    .single()
+
+  if (cache) {
+    return Response.json(cache.insight_data)
+  }
+
+  // 3. Procesar datos básicos para el prompt
   const income = transactions.filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0)
   const expenses = transactions.filter(t => t.type === 'expense').reduce((s, t) => s + Math.abs(Number(t.amount)), 0)
   const categories = [...new Set(transactions.map(t => t.category))]
   
   // 3. Consultar a la IA para el análisis profundo
-  const { text } = await generateText({
-    model: groq('llama-3.3-70b-versatile'),
-    system: `Eres un consultor financiero experto para PYMES. 
-    Analiza los datos del usuario y genera un reporte en formato JSON con la siguiente estructura:
-    {
-      "health": { "status": "excellent" | "good" | "warning" | "critical", "percentage": number, "message": string },
-      "tips": [ { "id": string, "title": string, "description": string, "type": "info" | "warning" | "success" } ],
-      "projection": string
-    }
-    Reglas:
-    1. Status: 'excellent' si el margen es > 30%, 'good' > 15%, 'warning' > 0%, 'critical' si hay pérdidas.
-    2. Tips: Deben ser específicos basados en el rubro del negocio (${business?.category || 'General'}).
-    3. Projection: Una oración sobre la tendencia basada en los últimos movimientos.
-    4. Responde SOLO con el JSON.`,
-    prompt: `Datos del negocio:
-    - Ingresos del periodo: $${income}
-    - Gastos del periodo: $${expenses}
-    - Categorías activas: ${categories.join(', ')}
-    - Metas actuales: ${goals?.map(g => `${g.name} (${Math.round((g.current/g.target)*100)}%)`).join(', ') || 'Ninguna'}
-    - Rubro: ${business?.category || 'No especificado'}`
-  })
-
   try {
-    const analysis = JSON.parse(text)
-    return Response.json(analysis)
-  } catch (e) {
-    console.error('Error parsing AI response:', text)
+    const { object } = await generateObject({
+      model: groq('llama-3.3-70b-versatile'),
+      schema: z.object({
+        health: z.object({
+          status: z.enum(['excellent', 'good', 'warning', 'critical']),
+          percentage: z.number(),
+          message: z.string(),
+        }),
+        tips: z.array(z.object({
+          id: z.string(),
+          title: z.string(),
+          description: z.string(),
+          type: z.enum(['info', 'warning', 'success']),
+        })),
+        projection: z.string(),
+      }),
+      system: `Eres un consultor financiero experto para PYMES. 
+      Analiza los datos del usuario.
+      Reglas:
+      1. Status: 'excellent' si el margen es > 30%, 'good' > 15%, 'warning' > 0%, 'critical' si hay pérdidas.
+      2. Tips: Deben ser específicos basados en el rubro del negocio (${business?.category || 'General'}).
+      3. Projection: Una oración sobre la tendencia basada en los últimos movimientos.`,
+      prompt: `Datos del negocio:
+      - Ingresos del periodo: $${income}
+      - Gastos del periodo: $${expenses}
+      - Categorías activas: ${categories.join(', ')}
+      - Metas actuales: ${goals?.map(g => `${g.name} (${Math.round((g.current/g.target)*100)}%)`).join(', ') || 'Ninguna'}
+      - Rubro: ${business?.category || 'No especificado'}`
+    })
+
+    // Guardar en caché antes de devolver
+    await supabase.from('insights_cache').insert({
+      user_id: user.id,
+      transactions_hash: transactionsHash,
+      insight_data: object
+    })
+
+    return Response.json(object)
+  } catch (error) {
+    console.error('Error generating AI object:', error)
     return Response.json({
       health: { status: 'good', percentage: 20, message: 'Análisis estándar disponible' },
       tips: [{ id: 'err', title: 'IA ocupada', description: 'No pudimos generar consejos personalizados en este momento.', type: 'info' }],

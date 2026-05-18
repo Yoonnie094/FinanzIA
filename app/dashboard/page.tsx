@@ -11,122 +11,64 @@ import { OnboardingTutorial } from '@/components/dashboard/onboarding-tutorial'
 import { FinancialGoals } from '@/components/dashboard/financial-goals'
 import { Wallet, TrendingUp, TrendingDown, Sparkles } from 'lucide-react'
 import { Suspense } from 'react'
-import type { Transaction, CategoryBreakdown, MonthlyTrend } from '@/lib/types'
 import { AnimatedGrid } from '@/components/dashboard/animated-grid'
 import { getCategoryTheme, cn } from '@/lib/utils'
 
-async function getTransactions(): Promise<Transaction[]> {
+async function getDashboardData(userId: string) {
   const supabase = await createClient()
-  const { data, error } = await supabase
+  
+  // Obtener transacciones recientes solo para la tabla visual (paginación rápida)
+  const { data: recentTransactions } = await supabase
     .from('transactions')
     .select('*')
+    .eq('user_id', userId)
     .order('date', { ascending: false })
-    .limit(200) // Limitar para performance
+    .limit(10)
 
-  if (error) {
-    console.error('Error fetching transactions:', error)
-    return []
+  // Llamar a la RPC para procesar todo en PostgreSQL y no saturar la memoria
+  const { data: summaryData, error: rpcError } = await supabase
+    .rpc('get_dashboard_summary', { p_user_id: userId })
+
+  if (rpcError || !summaryData) {
+    console.error('Error fetching summary RPC:', rpcError)
+    // Fallback en caso de que la RPC no haya sido creada en Supabase aún
+    return {
+      transactions: recentTransactions || [],
+      summary: { balance: 0, monthlyIncome: 0, monthlyExpenses: 0 },
+      categoryBreakdown: [],
+      monthlyTrend: [],
+      isNewUser: !recentTransactions || recentTransactions.length === 0
+    }
   }
 
-  return data || []
-}
+  const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
+  
+  // Formatear datos de la RPC para los componentes UI
+  const totalExpense = summaryData.categoryBreakdown.reduce((sum: number, c: any) => sum + Number(c.amount), 0)
+  const categoryBreakdown = summaryData.categoryBreakdown.map((c: any) => ({
+    category: c.category,
+    amount: Number(c.amount),
+    percentage: totalExpense > 0 ? Math.round((Number(c.amount) / totalExpense) * 100) : 0,
+    fill: ''
+  }))
 
-function calculateSummary(transactions: Transaction[]) {
-  const now = new Date()
-  const currentMonth = now.getMonth()
-  const currentYear = now.getFullYear()
-
-  const thisMonthTransactions = transactions.filter((t) => {
-    const date = new Date(t.date)
-    return date.getMonth() === currentMonth && date.getFullYear() === currentYear
-  })
-
-  const monthlyIncome = thisMonthTransactions
-    .filter((t) => t.type === 'income')
-    .reduce((sum, t) => sum + Number(t.amount), 0)
-
-  const monthlyExpenses = thisMonthTransactions
-    .filter((t) => t.type === 'expense')
-    .reduce((sum, t) => sum + Math.abs(Number(t.amount)), 0)
-
-  const totalIncome = transactions
-    .filter((t) => t.type === 'income')
-    .reduce((sum, t) => sum + Number(t.amount), 0)
-
-  const totalExpenses = transactions
-    .filter((t) => t.type === 'expense')
-    .reduce((sum, t) => sum + Math.abs(Number(t.amount)), 0)
-
-  const balance = totalIncome - totalExpenses
+  const monthlyTrend = summaryData.monthlyTrend.map((t: any) => ({
+    month: monthNames[Number(t.month_index) - 1] || 'Unk',
+    income: Number(t.income),
+    expenses: Number(t.expenses)
+  }))
 
   return {
-    balance,
-    monthlyIncome,
-    monthlyExpenses,
+    transactions: recentTransactions || [],
+    summary: {
+      balance: Number(summaryData.balance),
+      monthlyIncome: Number(summaryData.monthlyIncome),
+      monthlyExpenses: Number(summaryData.monthlyExpenses)
+    },
+    categoryBreakdown,
+    monthlyTrend,
+    isNewUser: !recentTransactions || recentTransactions.length === 0
   }
-}
-
-function getCategoryBreakdown(transactions: Transaction[]): CategoryBreakdown[] {
-  const now = new Date()
-  const currentMonth = now.getMonth()
-  const currentYear = now.getFullYear()
-
-  const thisMonthExpenses = transactions.filter((t) => {
-    const date = new Date(t.date)
-    return (
-      t.type === 'expense' &&
-      date.getMonth() === currentMonth &&
-      date.getFullYear() === currentYear
-    )
-  })
-
-  const categoryTotals: Record<string, number> = {}
-  thisMonthExpenses.forEach((t) => {
-    const category = t.category || 'Otros'
-    categoryTotals[category] = (categoryTotals[category] || 0) + Math.abs(Number(t.amount))
-  })
-
-  const total = Object.values(categoryTotals).reduce((sum, val) => sum + val, 0)
-
-  return Object.entries(categoryTotals)
-    .map(([category, amount]) => ({
-      category,
-      amount,
-      percentage: total > 0 ? Math.round((amount / total) * 100) : 0,
-      fill: '',
-    }))
-    .sort((a, b) => b.amount - a.amount)
-    .slice(0, 5)
-}
-
-function getMonthlyTrend(transactions: Transaction[]): MonthlyTrend[] {
-  const months: Record<string, { income: number; expenses: number }> = {}
-  const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
-
-  transactions.forEach((t) => {
-    const date = new Date(t.date)
-    const key = `${date.getFullYear()}-${date.getMonth()}`
-    
-    if (!months[key]) {
-      months[key] = { income: 0, expenses: 0 }
-    }
-
-    if (t.type === 'income') {
-      months[key].income += Number(t.amount)
-    } else {
-      months[key].expenses += Math.abs(Number(t.amount))
-    }
-  })
-
-  const sortedKeys = Object.keys(months).sort()
-  return sortedKeys.slice(-6).map((key) => {
-    const [, monthIndex] = key.split('-')
-    return {
-      month: monthNames[parseInt(monthIndex)],
-      income: months[key].income,
-      expenses: months[key].expenses,
-    }
-  })
 }
 
 function formatCurrency(value: number) {
@@ -141,17 +83,15 @@ export default async function DashboardPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   
-  const transactions = await getTransactions()
-  const summary = calculateSummary(transactions)
-  const categoryBreakdown = getCategoryBreakdown(transactions)
-  const monthlyTrend = getMonthlyTrend(transactions)
-  const isNewUser = transactions.length === 0
+  if (!user) return null
+
+  const { transactions, summary, categoryBreakdown, monthlyTrend, isNewUser } = await getDashboardData(user.id)
 
   // Fetch business info for theme
   const { data: business } = await supabase
     .from('businesses')
     .select('category')
-    .eq('user_id', user?.id)
+    .eq('user_id', user.id)
     .single()
 
   const themeClass = getCategoryTheme(business?.category)
