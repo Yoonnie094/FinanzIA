@@ -40,7 +40,7 @@ export default async function SettingsPage() {
         <TabsContent value="security" className="space-y-6">
           <div className="grid gap-6">
             <PasswordSettings />
-            <MFAManagement />
+            {/* MFAManagement deshabilitado en fase Beta Pública para simplificar onboarding contable */}
           </div>
         </TabsContent>
       </Tabs>

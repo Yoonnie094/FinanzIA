@@ -2,7 +2,6 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { DashboardNav } from '@/components/dashboard/dashboard-nav'
 import { FloatingChat } from '@/components/dashboard/floating-chat'
-import { StockAlertNotifier } from '@/components/dashboard/stock-alert-notifier'
 
 export default async function DashboardLayout({
   children,
@@ -34,7 +33,6 @@ export default async function DashboardLayout({
         {children}
       </main>
       <FloatingChat />
-      <StockAlertNotifier />
     </div>
   )
 }
