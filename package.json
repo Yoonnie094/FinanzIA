@@ -6,9 +6,11 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test:ai": "npx tsx lib/tests/ai-eval.ts"
   },
   "dependencies": {
+    "@ai-sdk/google": "^3.0.75",
     "@ai-sdk/groq": "^3.0.38",
     "@ai-sdk/react": "^3.0.176",
     "@hookform/resolvers": "^3.9.1",

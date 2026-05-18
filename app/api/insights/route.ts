@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { groq } from '@ai-sdk/groq'
+import { google } from '@ai-sdk/google'
 import { generateObject } from 'ai'
 import { z } from 'zod'
 import { createHash } from 'crypto'
@@ -62,51 +63,122 @@ export async function GET() {
   const categories = [...new Set(transactions.map(t => t.category))]
   
   // 3. Consultar a la IA para el análisis profundo
+  const insightsSchema = z.object({
+    health: z.object({
+      status: z.enum(['excellent', 'good', 'warning', 'critical']),
+      percentage: z.number(),
+      message: z.string(),
+    }),
+    tips: z.array(z.object({
+      id: z.string(),
+      title: z.string(),
+      description: z.string(),
+      type: z.enum(['info', 'warning', 'success']),
+    })),
+    projection: z.string(),
+  })
+
+  const insightsSystem = `Eres un consultor financiero experto para PYMES. 
+  Analiza los datos del usuario.
+  Reglas:
+  1. Status: 'excellent' si el margen es > 30%, 'good' > 15%, 'warning' > 0%, 'critical' si hay pérdidas.
+  2. Tips: Deben ser específicos basados en el rubro del negocio (${business?.category || 'General'}).
+  3. Projection: Una oración sobre la tendencia basada en los últimos movimientos.`
+
+  const insightsPrompt = `Datos del negocio:
+  - Ingresos del periodo: $${income}
+  - Gastos del periodo: $${expenses}
+  - Categorías activas: ${categories.join(', ')}
+  - Metas actuales: ${goals?.map(g => `${g.name} (${Math.round((g.current/g.target)*100)}%)`).join(', ') || 'Ninguna'}
+  - Rubro: ${business?.category || 'No especificado'}`
+
+  let objectResult;
   try {
+    // Intento 1: Groq Llama-3.3-70b (Principal)
     const { object } = await generateObject({
       model: groq('llama-3.3-70b-versatile'),
-      schema: z.object({
-        health: z.object({
-          status: z.enum(['excellent', 'good', 'warning', 'critical']),
-          percentage: z.number(),
-          message: z.string(),
-        }),
-        tips: z.array(z.object({
-          id: z.string(),
-          title: z.string(),
-          description: z.string(),
-          type: z.enum(['info', 'warning', 'success']),
-        })),
-        projection: z.string(),
-      }),
-      system: `Eres un consultor financiero experto para PYMES. 
-      Analiza los datos del usuario.
-      Reglas:
-      1. Status: 'excellent' si el margen es > 30%, 'good' > 15%, 'warning' > 0%, 'critical' si hay pérdidas.
-      2. Tips: Deben ser específicos basados en el rubro del negocio (${business?.category || 'General'}).
-      3. Projection: Una oración sobre la tendencia basada en los últimos movimientos.`,
-      prompt: `Datos del negocio:
-      - Ingresos del periodo: $${income}
-      - Gastos del periodo: $${expenses}
-      - Categorías activas: ${categories.join(', ')}
-      - Metas actuales: ${goals?.map(g => `${g.name} (${Math.round((g.current/g.target)*100)}%)`).join(', ') || 'Ninguna'}
-      - Rubro: ${business?.category || 'No especificado'}`
+      schema: insightsSchema,
+      system: insightsSystem,
+      prompt: insightsPrompt,
+      experimental_telemetry: {
+        isEnabled: true,
+        functionId: 'insights-generate',
+        metadata: { userId: user.id }
+      }
     })
+    objectResult = object
+  } catch (groqError) {
+    console.warn('⚠️ Falló generación de insights principal con Groq 70B, iniciando failover...', groqError)
+    
+    try {
+      // Registrar failover en auditoría
+      await supabase.from('error_auditoria').insert({
+        usuario_id: user.id,
+        error_mensaje: `FAILOVER_INSIGHTS: Groq Llama-3.3-70b falló. Error: ${groqError instanceof Error ? groqError.message : String(groqError)}`,
+        tool_name: 'insights_failover_trigger',
+        input_data: { error: String(groqError) }
+      })
 
-    // Guardar en caché antes de devolver
-    await supabase.from('insights_cache').insert({
-      user_id: user.id,
-      transactions_hash: transactionsHash,
-      insight_data: object
-    })
-
-    return Response.json(object)
-  } catch (error) {
-    console.error('Error generating AI object:', error)
-    return Response.json({
-      health: { status: 'good', percentage: 20, message: 'Análisis estándar disponible' },
-      tips: [{ id: 'err', title: 'IA ocupada', description: 'No pudimos generar consejos personalizados en este momento.', type: 'info' }],
-      projection: 'Tendencia estable'
-    })
+      // Intento 2: Google Gemini 1.5 Flash (Fallback Cruzado)
+      if (process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
+        console.log('🔄 Ejecutando fallback con Google Gemini 1.5 Flash para Insights...')
+        const { object } = await generateObject({
+          model: google('gemini-1.5-flash'),
+          schema: insightsSchema,
+          system: insightsSystem,
+          prompt: insightsPrompt,
+          experimental_telemetry: {
+            isEnabled: true,
+            functionId: 'insights-generate-fallback',
+            metadata: { userId: user.id }
+          }
+        })
+        objectResult = object
+      } else {
+        // Fallback secundario de Groq: Llama-3.1-8b
+        console.warn('⚠️ GOOGLE_GENERATIVE_AI_API_KEY no configurada. Usando Llama-3.1-8b en Groq como fallback secundario en Insights...')
+        const { object } = await generateObject({
+          model: groq('llama-3.1-8b-instant'),
+          schema: insightsSchema,
+          system: insightsSystem,
+          prompt: insightsPrompt,
+          experimental_telemetry: {
+            isEnabled: true,
+            functionId: 'insights-generate-fallback-groq',
+            metadata: { userId: user.id }
+          }
+        })
+        objectResult = object
+      }
+    } catch (fallbackError) {
+      console.error('❌ Todos los proveedores fallaron en Insights:', fallbackError)
+      await supabase.from('error_auditoria').insert({
+        usuario_id: user.id,
+        error_mensaje: `FAILOVER_INSIGHTS_CRITICAL: Todos los proveedores fallaron. Error: ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`,
+        tool_name: 'insights_critical_failure',
+        input_data: { error: String(fallbackError) }
+      })
+      // Devolver fallback estático controlado
+      objectResult = {
+        health: { status: 'good' as const, percentage: 20, message: 'Análisis estándar disponible' },
+        tips: [{ id: 'err', title: 'IA ocupada', description: 'No pudimos generar consejos personalizados en este momento.', type: 'info' as const }],
+        projection: 'Tendencia estable'
+      }
+    }
   }
+
+  // Guardar en caché antes de devolver si obtuvimos un resultado válido
+  if (objectResult) {
+    try {
+      await supabase.from('insights_cache').insert({
+        user_id: user.id,
+        transactions_hash: transactionsHash,
+        insight_data: objectResult
+      })
+    } catch (dbErr) {
+      console.error('Error guardando insights en insights_cache:', dbErr)
+    }
+  }
+
+  return Response.json(objectResult)
 }

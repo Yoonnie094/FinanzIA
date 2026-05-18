@@ -2,6 +2,33 @@
 -- Propósito: Implementación global de Row Level Security (RLS) para aislamiento de inquilinos.
 -- Instrucciones: Ejecutar este script en el editor SQL de Supabase en el entorno de Producción.
 
+-- 0. Asegurar que las tablas auxiliares existan antes de aplicarles RLS
+CREATE TABLE IF NOT EXISTS error_auditoria (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  usuario_id UUID,
+  error_mensaje TEXT,
+  tool_name TEXT,
+  input_data JSONB,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS chat_messages (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID NOT NULL,
+  role TEXT NOT NULL,
+  content TEXT NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS insights_cache (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID NOT NULL,
+  type TEXT NOT NULL,
+  insights JSONB NOT NULL,
+  valid_until TIMESTAMP WITH TIME ZONE NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
 -- 1. Habilitar RLS en TODAS las tablas identificadas
 ALTER TABLE IF EXISTS profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS businesses ENABLE ROW LEVEL SECURITY;
