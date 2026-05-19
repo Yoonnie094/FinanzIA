@@ -10,7 +10,7 @@ export async function GET() {
 
   const { data: messages, error } = await supabase
     .from('chat_messages')
-    .select('id, role, content, created_at')
+    .select('id, role, content, created_at, parts')
     .eq('user_id', user.id)
     .order('created_at', { ascending: false })
     .limit(50)
@@ -28,6 +28,7 @@ export async function GET() {
     id: msg.id,
     role: msg.role,
     content: msg.content,
+    parts: msg.parts || undefined
   }))
 
   return new Response(JSON.stringify(formattedMessages), {

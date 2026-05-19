@@ -208,14 +208,30 @@ export function FloatingChat() {
                         <p className="text-xs whitespace-pre-wrap">{text}</p>
                       )}
                       
-                      {toolInvocations.map((part: { type: string; toolInvocation?: { toolName: string; state: string; output?: { success?: boolean; message?: string; transaction?: { type: string; amount: number }; balance?: number; totalIncome?: number; totalExpenses?: number } } }, idx: number) => {
+                      {toolInvocations.map((part: { type: string; toolInvocation?: { toolName: string; state: string; output?: { success?: boolean; message?: string; transaction?: { type: string; amount: number }; balance?: number; totalIncome?: number; totalExpenses?: number; lowStockAlert?: string | null } } }, idx: number) => {
                         if (part.type !== 'tool-invocation' || !part.toolInvocation) return null
                         const { toolName, state, output } = part.toolInvocation
 
                         if (state === 'output-available' && output) {
-                          if (toolName === 'addTransaction' && output.success) {
+                          if (toolName === 'updateInventory' && output.success) {
                             return (
-                              <div key={idx} className="mt-2 flex items-center gap-2 rounded-lg bg-success/20 p-2 text-success">
+                              <div key={idx} className="mt-2 space-y-1.5">
+                                <div className="flex items-center gap-2 rounded-lg bg-success/20 p-2 text-success border border-success/10">
+                                  <CheckCircle className="h-3 w-3" />
+                                  <span className="text-[10px]">{output.message}</span>
+                                </div>
+                                {output.lowStockAlert && (
+                                  <div className="flex items-center gap-2 rounded-lg bg-amber-500/10 p-2 text-amber-500 border border-amber-500/20 animate-pulse">
+                                    <span className="text-[10px]">{output.lowStockAlert}</span>
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          }
+
+                          if (['addTransaction', 'updateTransaction', 'deleteTransaction', 'manageGoals'].includes(toolName) && output.success) {
+                            return (
+                              <div key={idx} className="mt-2 flex items-center gap-2 rounded-lg bg-success/20 p-2 text-success border border-success/10">
                                 <CheckCircle className="h-3 w-3" />
                                 <span className="text-[10px]">{output.message}</span>
                               </div>

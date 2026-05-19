@@ -42,7 +42,7 @@ export async function GET() {
     })
   }
 
-  // 2. Validar caché
+  // 2. Validar caché (Usando columnas reales de base de datos para máxima robustez)
   const hashInput = JSON.stringify(transactions.map(t => t.id + t.amount + t.date)) + JSON.stringify(goals)
   const transactionsHash = createHash('sha256').update(hashInput).digest('hex')
 
@@ -50,11 +50,15 @@ export async function GET() {
     .from('insights_cache')
     .select('*')
     .eq('user_id', user.id)
-    .eq('transactions_hash', transactionsHash)
-    .single()
+    .eq('type', 'financial_insights')
+    .maybeSingle()
 
-  if (cache) {
-    return Response.json(cache.insight_data)
+  if (cache && cache.insights) {
+    const cacheData = cache.insights as { transactions_hash: string; insight_data: any }
+    if (cacheData.transactions_hash === transactionsHash) {
+      console.log('⚡ [Insights Cache] HIT - Retornando datos analíticos cacheados')
+      return Response.json(cacheData.insight_data)
+    }
   }
 
   // 3. Procesar datos básicos para el prompt
@@ -167,16 +171,37 @@ export async function GET() {
     }
   }
 
-  // Guardar en caché antes de devolver si obtuvimos un resultado válido
+  // Guardar en caché antes de devolver si obtuvimos un resultado válido (Alineado con el esquema relacional)
   if (objectResult) {
     try {
-      await supabase.from('insights_cache').insert({
-        user_id: user.id,
+      const insightsPayload = {
         transactions_hash: transactionsHash,
         insight_data: objectResult
-      })
+      }
+
+      if (cache) {
+        // Actualizar registro existente
+        await supabase
+          .from('insights_cache')
+          .update({
+            insights: insightsPayload,
+            valid_until: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() // 24 horas
+          })
+          .eq('id', cache.id)
+      } else {
+        // Crear nuevo registro
+        await supabase
+          .from('insights_cache')
+          .insert({
+            user_id: user.id,
+            type: 'financial_insights',
+            insights: insightsPayload,
+            valid_until: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+          })
+      }
+      console.log('✅ [Insights Cache] Guardado con éxito en la base de datos')
     } catch (dbErr) {
-      console.error('Error guardando insights en insights_cache:', dbErr)
+      console.error('❌ Error guardando insights en insights_cache:', dbErr)
     }
   }
 

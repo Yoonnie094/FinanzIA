@@ -1,4 +1,5 @@
 import { escapeHTML } from '../utils'
+import { z } from 'zod'
 
 // Patrones de inyección de prompt del backend
 function detectPromptInjection(text: string): boolean {
@@ -137,6 +138,51 @@ function runTests() {
   evaluateSuite('Sanitización Ingress XSS (escapeHTML)', XSS_TESTS, escapeHTML)
   evaluateSuite('Filtro de Inyección de Prompts (detectPromptInjection)', INJECTION_TESTS, detectPromptInjection)
   evaluateSuite('Enrutador Dinámico de Modelos (isComplexQuery)', ROUTER_TESTS, isComplexQuery)
+  
+  // Nuevas pruebas de esquemas Zod (Herramientas modificadas)
+  const updateTransactionSchema = z.object({
+    concept_search: z.string(),
+    new_amount: z.number().positive().optional(),
+    new_concept: z.string().min(1).max(100).optional(),
+  })
+
+  const updateInventorySchema = z.object({
+    name: z.string().min(1).max(100),
+    action: z.enum(['add', 'remove']),
+    quantity: z.number().positive(),
+    unit: z.string().optional(),
+    cost_unit: z.number().min(0).optional(),
+    category: z.string().optional(),
+    min_stock: z.number().min(0).optional(),
+  })
+
+  const ZOD_SCHEMAS_TESTS: TestCase<any, boolean>[] = [
+    {
+      name: 'updateTransactionSchema valida correctamente concepto opcional',
+      input: { concept_search: 'harina', new_concept: 'Saco Harina Extra' },
+      expected: true
+    },
+    {
+      name: 'updateTransactionSchema valida correctamente monto y concepto juntos',
+      input: { concept_search: 'harina', new_amount: 15000, new_concept: 'Saco Harina Fina' },
+      expected: true
+    },
+    {
+      name: 'updateInventorySchema valida correctamente min_stock de alerta',
+      input: { name: 'Harina', action: 'add', quantity: 10, min_stock: 3 },
+      expected: true
+    },
+    {
+      name: 'updateInventorySchema falla con cantidades negativas',
+      input: { name: 'Harina', action: 'add', quantity: -10 },
+      expected: false
+    }
+  ]
+
+  evaluateSuite('Validación Zod: updateTransaction y updateInventory', ZOD_SCHEMAS_TESTS, (input) => {
+    const schema = input.hasOwnProperty('concept_search') ? updateTransactionSchema : updateInventorySchema
+    return schema.safeParse(input).success
+  })
   
   console.log('======================================================')
   console.log(`📊 RESUMEN DEL TEST RUN:`)
