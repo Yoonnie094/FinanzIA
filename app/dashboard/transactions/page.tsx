@@ -3,11 +3,12 @@ import { TransactionsTable } from '@/components/dashboard/transactions-table'
 import { AddTransactionDialog } from '@/components/dashboard/add-transaction-dialog'
 import type { Transaction } from '@/lib/types'
 
-async function getTransactions(): Promise<Transaction[]> {
+async function getTransactions(userId: string): Promise<Transaction[]> {
   const supabase = await createClient()
   const { data, error } = await supabase
     .from('transactions')
     .select('*')
+    .eq('user_id', userId)
     .order('date', { ascending: false })
 
   if (error) {
@@ -19,7 +20,11 @@ async function getTransactions(): Promise<Transaction[]> {
 }
 
 export default async function TransactionsPage() {
-  const transactions = await getTransactions()
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return null
+
+  const transactions = await getTransactions(user.id)
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-6 md:px-6">

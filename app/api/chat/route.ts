@@ -17,6 +17,18 @@ import { escapeHTML } from '@/lib/utils'
 // @ts-ignore
 import { waitUntil } from 'next/server'
 
+// Helper seguro para segundo plano en entornos Node.js local / serverless
+function safeWaitUntil(promise: any) {
+  try {
+    waitUntil(promise)
+  } catch (e) {
+    // Si no está disponible waitUntil (ej. dev local), resolvemos de forma asíncrona estándar
+    if (promise && typeof promise.catch === 'function') {
+      promise.catch((err: any) => console.error('Background task error:', err))
+    }
+  }
+}
+
 
 export const maxDuration = 30
 
@@ -33,9 +45,9 @@ async function checkRateLimit(supabase: Awaited<ReturnType<typeof createClient>>
       p_window_start: windowKey
     })
 
-    // Limpiar ventanas antiguas (>5 minutos) de forma asíncrona sin bloquear la respuesta (Envuelto en waitUntil para serverless)
+    // Limpiar ventanas antiguas (>5 minutos) de forma asíncrona sin bloquear la respuesta (Envuelto en safeWaitUntil para serverless/dev)
     const cutoff = new Date(Date.now() - 5 * 60 * 1000).toISOString()
-    waitUntil(
+    safeWaitUntil(
       supabase
         .from('rate_limits')
         .delete()
@@ -214,8 +226,8 @@ async function logAPMTrace(userId: string, isComplex: boolean, modelUsed: string
 const addTransactionTool = tool({
   description: 'Registra una transaccion financiera (gasto o ingreso) en la base de datos del usuario',
   inputSchema: z.object({
-    concept: z.string().min(1).max(100).describe('Descripcion breve de la transaccion'),
-    amount: z.number().positive().max(100000000).describe('Monto positivo de la transaccion'),
+    concept: z.string().min(1).max(100).describe('Descripcion breve de la transaccion. IMPORTANTE: Si el usuario indica que la transacción es "fiada", "al fiado", o "fiar" (por ejemplo: "le fié un pastel a Juan"), debes anteponer el prefijo "[FIADO] " de forma obligatoria al concepto (ejemplo: "[FIADO] pastel a Juan").'),
+    amount: z.number().positive().max(100000000).describe('Monto positivo de la transaccion. IMPORTANTE: Si el usuario menciona modismos chilenos de dinero (como luca/lucas x1000, gamba/gambas x100, palo/palos x1000000, quina x500), debes calcular matemáticamente el monto absoluto exacto en pesos chilenos y pasarlo como número puro (ejemplo: "20 lucas" -> 20000, "3 gambas" -> 300, "2 palos" -> 2000000).'),
     category: z.string().describe('Categoria de la transaccion'),
     type: z.enum(['income', 'expense']).describe('Tipo: income o expense'),
   }),
@@ -263,8 +275,8 @@ const updateTransactionTool = tool({
   description: 'Actualiza el monto y/o el concepto de la última transacción que coincida con el nombre dado.',
   inputSchema: z.object({
     concept_search: z.string().describe('Palabra clave para buscar la transacción a actualizar (ej: harina)'),
-    new_amount: z.number().positive().optional().describe('Nuevo monto positivo para la transacción (opcional)'),
-    new_concept: z.string().min(1).max(100).optional().describe('Nuevo concepto/descripción para la transacción (opcional)'),
+    new_amount: z.number().positive().optional().describe('Nuevo monto positivo para la transacción (opcional). IMPORTANTE: Si el usuario menciona modismos chilenos de dinero (como luca/lucas x1000, gamba/gambas x100, palo/palos x1000000, quina x500), debes calcular matemáticamente el monto absoluto exacto en pesos chilenos y pasarlo como número puro (ejemplo: "20 lucas" -> 20000).'),
+    new_concept: z.string().min(1).max(100).optional().describe('Nuevo concepto/descripción para la transacción (opcional).'),
   }),
   async execute({ concept_search, new_amount, new_concept }) {
     const supabase = await createClient()
@@ -485,8 +497,8 @@ const manageGoalsTool = tool({
   inputSchema: z.object({
     action: z.enum(['create', 'list', 'update_progress']).describe('Acción a realizar'),
     name: z.string().optional().describe('Nombre de la meta'),
-    target: z.number().optional().describe('Monto objetivo total'),
-    amount_to_add: z.number().optional().describe('Monto a sumar al progreso actual'),
+    target: z.number().optional().describe('Monto objetivo total. IMPORTANTE: Si el usuario menciona modismos chilenos (como luca/lucas, gamba/gambas, palo/palos), debes calcular el valor numérico absoluto en CLP (ejemplo: "20 lucas" -> 20000).'),
+    amount_to_add: z.number().optional().describe('Monto a sumar al progreso actual. IMPORTANTE: Si el usuario menciona modismos chilenos (como luca/lucas, gamba/gambas, palo/palos), debes calcular el valor numérico absoluto en CLP (ejemplo: "20 lucas" -> 20000).'),
   }),
   async execute({ action, name, target, amount_to_add }) {
     const supabase = await createClient()
@@ -586,12 +598,36 @@ export async function POST(req: Request) {
     )
   }
 
-  // Cargar contexto del negocio para personalizar la IA
-  const { data: business } = await supabase
-    .from('businesses')
-    .select('name, category, description, country, currency')
-    .eq('user_id', user.id)
-    .single()
+  // Cargar contexto del negocio y resumen del historial en paralelo
+  let business: any = null
+  let chatSummary = ''
+  try {
+    const [businessResult, cachedSummaryResult] = await Promise.all([
+      supabase
+        .from('businesses')
+        .select('name, category, description, country, currency')
+        .eq('user_id', user.id)
+        .single(),
+      supabase
+        .from('insights_cache')
+        .select('insights')
+        .eq('user_id', user.id)
+        .eq('type', 'chat_summary')
+        .maybeSingle()
+    ])
+
+    business = businessResult.data
+    const cachedSummary = cachedSummaryResult.data
+
+    if (cachedSummary && cachedSummary.insights) {
+      const cacheData = cachedSummary.insights as { summary: string }
+      if (cacheData && cacheData.summary) {
+        chatSummary = cacheData.summary
+      }
+    }
+  } catch (err) {
+    console.error('Error al cargar contexto o resumen en paralelo:', err)
+  }
 
   const businessContext = business
     ? `
@@ -605,38 +641,17 @@ export async function POST(req: Request) {
 Usa este contexto para dar consejos financieros PROFUNDOS y personalizados.`
     : ''
 
-  // Cargar resumen de historial acumulado (Fase 2 - Memoria Semántica)
-  let chatSummary = ''
-  try {
-    const { data: cachedSummary } = await supabase
-      .from('insights_cache')
-      .select('insights')
-      .eq('user_id', user.id)
-      .eq('type', 'chat_summary')
-      .maybeSingle()
-
-    if (cachedSummary && cachedSummary.insights) {
-      const cacheData = cachedSummary.insights as { summary: string }
-      if (cacheData && cacheData.summary) {
-        chatSummary = cacheData.summary
-      }
-    }
-  } catch (err) {
-    console.error('Error al cargar resumen de historial acumulado:', err)
-  }
-
   const messages = await validateUIMessages<ChatMessage>({
     messages: rawMessages,
     tools,
   })
 
-  // Guardar mensaje del usuario en DB con estructura parts para integridad
+  // Guardar mensaje del usuario en DB con estructura content para integridad
   if (lastUserText) {
     await supabase.from('chat_messages').insert({
       user_id: user.id,
       role: 'user',
-      content: lastUserText,
-      parts: [{ type: 'text', text: lastUserText }]
+      content: lastUserText
     })
   }
 
@@ -670,7 +685,7 @@ Usa este contexto para dar consejos financieros PROFUNDOS y personalizados.`
   <conversation_adaptation>
     Detecta automáticamente el estilo del usuario y adapta tu tono conversacional:
     - Si el usuario se expresa de forma formal y seria: Responde con máxima profesionalidad, claridad y un tono respetuoso.
-    - Si el usuario usa jerga relajada, modismos y abreviaciones chilenas: Adapta tu tono para ser más cercano, empático y natural, entendiéndole perfectamente cada expresión sin pedir aclaraciones redundantes de términos comunes.
+    - Si el usuario usa jerga relajada, modismos y abreviaciones chilenas: Adapta tu tono para ser más cercano, empático y natural, entendiéndele perfectamente cada expresión sin pedir aclaraciones redundantes de términos comunes.
   </conversation_adaptation>
 
   <business_context>
@@ -687,21 +702,35 @@ Usa este contexto para dar consejos financieros PROFUNDOS y personalizados.`
     3. EDICIÓN (UPDATE): Usa 'updateTransaction' si el usuario se equivocó o quiere corregir conceptos o montos.
     4. ELIMINACIÓN (DELETE): Usa 'deleteTransaction' si solicita explícitamente anular, borrar o descartar un movimiento contable.
     5. METAS: Usa 'manageGoals' para crear o actualizar metas de ahorro. Celebra los hitos de cumplimiento del usuario.
+    6. CRITICAL DE EJECUCIÓN (TOOL FORCING): Si la intención o consulta del usuario implica registrar una venta, un gasto, actualizar inventario, buscar metas o solicitar un informe, DEBES invocar la herramienta correspondiente de forma inmediata y automática en este mismo turno. Está ESTRICTAMENTE PROHIBIDO limitarte a redactar una respuesta textual indicando que lo harás; debes ejecutar la acción llamando a la función del backend correspondiente sin dilaciones.
   </operational_rules>
 </system_configuration>`
 
-  // Clasificar complejidad de la consulta para enrutamiento dinámico (Fase 3)
+  const isMockGoogleKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY === 'AIzaSyA8vJQoZzY3eCxWqR13kUhSD2Gobhf-X4I' ||
+                          process.env.GOOGLE_GENERATIVE_AI_API_KEY?.startsWith('mock_') ||
+                          !process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+  const hasGemini = !!process.env.GOOGLE_GENERATIVE_AI_API_KEY && !isMockGoogleKey
   const isComplex = isComplexQuery(lastUserText)
-  const primaryModel = isComplex ? groq('llama-3.3-70b-versatile') : groq('llama-3.1-8b-instant')
-  const primaryModelName = isComplex ? 'groq-llama-3.3-70b-versatile' : 'groq-llama-3.1-8b-instant'
   
-  const hasGemini = !!process.env.GOOGLE_GENERATIVE_AI_API_KEY
-  const fallbackModel = hasGemini 
+  // Enrutamiento dinámico optimizado por latencia extrema:
+  // Si la consulta es simple (saludos o charlas cortas), usamos Groq Llama 3.1 8B por su velocidad extrema (TTFT < 100ms).
+  // Si es compleja, priorizamos Gemini 1.5 Flash (si está disponible) por sus capacidades de tool calling y razonamiento estructurado.
+  // Como fallback final, usamos Groq Llama 3.3 70B para consultas complejas o Llama 3.1 8B para consultas simples.
+  const useGemini = hasGemini && isComplex
+
+  const primaryModel = useGemini
     ? google('gemini-1.5-flash')
-    : (isComplex ? groq('llama-3.1-8b-instant') : groq('llama-3.3-70b-versatile'))
-  const fallbackModelName = hasGemini
+    : (isComplex ? groq('llama-3.3-70b-versatile') : groq('llama-3.1-8b-instant'))
+  const primaryModelName = useGemini
     ? 'google-gemini-1.5-flash'
-    : (isComplex ? 'groq-llama-3.1-8b-instant' : 'groq-llama-3.3-70b-versatile')
+    : (isComplex ? 'groq-llama-3.3-70b-versatile' : 'groq-llama-3.1-8b-instant')
+  
+  const fallbackModel = useGemini
+    ? groq('llama-3.3-70b-versatile')
+    : (hasGemini ? google('gemini-1.5-flash') : (isComplex ? groq('llama-3.1-8b-instant') : groq('llama-3.3-70b-versatile')))
+  const fallbackModelName = useGemini
+    ? 'groq-llama-3.3-70b-versatile'
+    : (hasGemini ? 'google-gemini-1.5-flash' : (isComplex ? 'groq-llama-3.1-8b-instant' : 'groq-llama-3.3-70b-versatile'))
 
   console.log(`[Dynamic Router] Petición del usuario clasificada como: ${isComplex ? 'COMPLEJA' : 'SIMPLE'}. Modelo principal: ${primaryModelName}`)
 
@@ -713,6 +742,7 @@ Usa este contexto para dar consejos financieros PROFUNDOS y personalizados.`
       system: systemPrompt,
       messages: await convertToModelMessages(messages),
       stopWhen: stepCountIs(5),
+      maxRetries: 0,
       tools,
       experimental_telemetry: {
         isEnabled: true,
@@ -752,12 +782,12 @@ Usa este contexto para dar consejos financieros PROFUNDOS y personalizados.`
             parts: parts
           })
           
-          // Actualizar resumen acumulado en segundo plano (Envuelto en waitUntil para evitar congelamientos en serverless)
-          waitUntil(updateChatSummaryInBackground(user.id).catch(console.error))
+          // Actualizar resumen acumulado en segundo plano (Envuelto en safeWaitUntil para evitar congelamientos en serverless/dev)
+          safeWaitUntil(updateChatSummaryInBackground(user.id).catch(console.error))
         }
         
-        // Registrar telemetría APM (Envuelto en waitUntil)
-        waitUntil(logAPMTrace(user.id, isComplex, primaryModelName, Date.now() - startTime, true).catch(console.error))
+        // Registrar telemetría APM (Envuelto en safeWaitUntil)
+        safeWaitUntil(logAPMTrace(user.id, isComplex, primaryModelName, Date.now() - startTime, true).catch(console.error))
 
         const suspiciousOutput = [/INSERT INTO/i, /SELECT .* FROM/i, /DROP TABLE/i, /DELETE FROM/i]
         if (suspiciousOutput.some(pattern => pattern.test(text))) {
@@ -791,6 +821,7 @@ Usa este contexto para dar consejos financieros PROFUNDOS y personalizados.`
         system: systemPrompt,
         messages: await convertToModelMessages(messages),
         stopWhen: stepCountIs(5),
+        maxRetries: 0,
         tools,
         experimental_telemetry: {
           isEnabled: true,
@@ -830,10 +861,10 @@ Usa este contexto para dar consejos financieros PROFUNDOS y personalizados.`
               parts: parts
             })
             
-            waitUntil(updateChatSummaryInBackground(user.id).catch(console.error))
+            safeWaitUntil(updateChatSummaryInBackground(user.id).catch(console.error))
           }
           
-          waitUntil(logAPMTrace(user.id, isComplex, fallbackModelName, Date.now() - startTime, true).catch(console.error))
+          safeWaitUntil(logAPMTrace(user.id, isComplex, fallbackModelName, Date.now() - startTime, true).catch(console.error))
         }
       })
       return result.toUIMessageStreamResponse()

@@ -10,7 +10,7 @@ export async function GET() {
 
   const { data: messages, error } = await supabase
     .from('chat_messages')
-    .select('id, role, content, created_at, parts')
+    .select('id, role, content, parts, created_at')
     .eq('user_id', user.id)
     .order('created_at', { ascending: false })
     .limit(50)
@@ -23,12 +23,17 @@ export async function GET() {
     )
   }
 
-  // Format to Vercel AI SDK structure
-  const formattedMessages = messages.reverse().map(msg => ({
+  // Format to Vercel AI SDK structure. Copy array safely to prevent mutation side-effects,
+  // then map the chronological messages to client schema.
+  const formattedMessages = [...messages].reverse().map(msg => ({
     id: msg.id,
-    role: msg.role,
-    content: msg.content,
-    parts: msg.parts || undefined
+    role: msg.role as 'user' | 'assistant',
+    parts: (msg.parts as any) || [
+      {
+        type: 'text' as const,
+        text: msg.content || ''
+      }
+    ]
   }))
 
   return new Response(JSON.stringify(formattedMessages), {

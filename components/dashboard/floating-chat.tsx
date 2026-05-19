@@ -2,7 +2,6 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { useChat } from '@ai-sdk/react'
-import { DefaultChatTransport } from 'ai'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -32,26 +31,43 @@ function getUIMessageText(msg: { parts?: Array<{ type: string; text?: string }> 
 
 export function FloatingChat() {
   const [isOpen, setIsOpen] = useState(false)
-  const [input, setInput] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const router = useRouter()
+  const [input, setInput] = useState('')
   
-  const { messages, setMessages, sendMessage, status, error } = useChat({
-    transport: new DefaultChatTransport({ api: '/api/chat' }),
+  const { messages, sendMessage, setMessages, status, error } = useChat({
     onFinish: () => {
       // Recarga los datos de la pagina (ej. el Dashboard) cuando la IA termina de hablar
       router.refresh()
     },
-    initialMessages: [
+    messages: [
       {
         id: 'welcome',
-        role: 'assistant',
-        content: '¡Hola! Qué gusto saludarte. Soy Yoonnie, tu asistente de FinanzIA. 👋\n\n¡Hoy será un gran día para tu negocio! ¿En qué te puedo ayudar hoy? Puedes decirme algo como "Vendí 3 tortas" o preguntarme por el resumen de tus gastos.',
+        role: 'assistant' as 'user' | 'assistant',
+        parts: [
+          {
+            type: 'text',
+            text: '¡Hola! Qué gusto saludarte. Soy Yoonnie, tu asistente de FinanzIA. 👋\n\n¡Hoy será un gran día para tu negocio! ¿En qué te puedo ayudar hoy? Puedes decirme algo como "Vendí 3 tortas" o preguntarme por el resumen de tus gastos.',
+          }
+        ]
       }
     ]
-  } as any)
+  })
 
   const isLoading = status === 'streaming' || status === 'submitted'
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setInput(e.target.value)
+  }
+
+  const handleSubmit = (e?: React.FormEvent<HTMLFormElement>) => {
+    e?.preventDefault()
+    if (!input.trim()) return
+    sendMessage({
+      text: input
+    })
+    setInput('')
+  }
 
   useEffect(() => {
     fetch('/api/chat/history')
@@ -61,8 +77,13 @@ export function FloatingChat() {
           setMessages([
             {
               id: 'welcome',
-              role: 'assistant',
-              content: '¡Hola! Qué gusto saludarte. Soy Yoonnie, tu asistente de FinanzIA. 👋\n\n¡Hoy será un gran día para tu negocio! ¿En qué te puedo ayudar hoy? Puedes decirme algo como "Vendí 3 tortas" o preguntarme por el resumen de tus gastos.',
+              role: 'assistant' as 'user' | 'assistant',
+              parts: [
+                {
+                  type: 'text',
+                  text: '¡Hola! Qué gusto saludarte. Soy Yoonnie, tu asistente de FinanzIA. 👋\n\n¡Hoy será un gran día para tu negocio! ¿En qué te puedo ayudar hoy? Puedes decirme algo como "Vendí 3 tortas" o preguntarme por el resumen de tus gastos.',
+                }
+              ]
             },
             ...data
           ])
@@ -75,12 +96,6 @@ export function FloatingChat() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!input.trim() || isLoading) return
-    sendMessage({ text: input })
-    setInput('')
-  }
 
   const quickActions = [
     { label: 'Resumen del mes', message: 'Dame un resumen de mis finanzas del mes' },
@@ -179,9 +194,10 @@ export function FloatingChat() {
                 const text = getUIMessageText(message) || (message as any).content || ''
                 const isUser = message.role === 'user'
 
-                const toolInvocations = message.parts?.filter(
-                  (p) => p.type === 'tool-invocation'
-                ) || []
+                const parts = (message.parts as any[]) || []
+                const toolInvocations = parts.filter(
+                  (p) => p.type.startsWith('tool-') || p.type === 'dynamic-tool'
+                )
 
                 return (
                   <div
@@ -208,9 +224,9 @@ export function FloatingChat() {
                         <p className="text-xs whitespace-pre-wrap">{text}</p>
                       )}
                       
-                      {toolInvocations.map((part: { type: string; toolInvocation?: { toolName: string; state: string; output?: { success?: boolean; message?: string; transaction?: { type: string; amount: number }; balance?: number; totalIncome?: number; totalExpenses?: number; lowStockAlert?: string | null } } }, idx: number) => {
-                        if (part.type !== 'tool-invocation' || !part.toolInvocation) return null
-                        const { toolName, state, output } = part.toolInvocation
+                      {toolInvocations.map((part: any, idx: number) => {
+                        const toolName = part.type.startsWith('tool-') ? part.type.slice(5) : part.toolName
+                        const { state, output } = part
 
                         if (state === 'output-available' && output) {
                           if (toolName === 'updateInventory' && output.success) {
@@ -333,7 +349,7 @@ export function FloatingChat() {
             </Button>
             <Input
               value={input}
-              onChange={(e) => setInput(e.target.value)}
+              onChange={handleInputChange}
               placeholder="Registrar venta, gasto..."
               disabled={isLoading}
               className="flex-1 h-9 text-sm bg-background border-border shadow-sm focus-visible:ring-primary"

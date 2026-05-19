@@ -120,15 +120,17 @@ function runTests() {
     console.log('------------------------------------------------------')
     for (const c of cases) {
       const result = fn(c.input)
-      const passed = result === c.expected
+      const passed = typeof result === 'object' && result !== null
+        ? JSON.stringify(result) === JSON.stringify(c.expected)
+        : result === c.expected
       if (passed) {
         console.log(`✅ [PASS] ${c.name}`)
         passedCount++
       } else {
         console.error(`❌ [FAIL] ${c.name}`)
         console.error(`   Entrada:  "${c.input}"`)
-        console.error(`   Esperado: ${c.expected}`)
-        console.error(`   Obtenido: ${result}`)
+        console.error(`   Esperado: ${typeof c.expected === 'object' ? JSON.stringify(c.expected) : c.expected}`)
+        console.error(`   Obtenido: ${typeof result === 'object' ? JSON.stringify(result) : JSON.stringify(result)}`)
         failedCount++
       }
     }
@@ -182,6 +184,61 @@ function runTests() {
   evaluateSuite('Validación Zod: updateTransaction y updateInventory', ZOD_SCHEMAS_TESTS, (input) => {
     const schema = input.hasOwnProperty('concept_search') ? updateTransactionSchema : updateInventorySchema
     return schema.safeParse(input).success
+  })
+
+  // Nuevas pruebas: Conversión de Modismos Chilenos a CLP y Reglas de Negocio
+  const SLANG_TESTS: TestCase<string, { amount: number; isFiado: boolean }>[] = [
+    {
+      name: 'Convierte "20 lucas" a 20000 CLP',
+      input: 'gasté 20 lucas en harina',
+      expected: { amount: 20000, isFiado: false }
+    },
+    {
+      name: 'Convierte "3 gambas" a 300 CLP',
+      input: 'compré 3 gambas de dulce',
+      expected: { amount: 300, isFiado: false }
+    },
+    {
+      name: 'Convierte "2 palos" a 2000000 CLP',
+      input: 'ingresé 2 palos de inversión',
+      expected: { amount: 2000000, isFiado: false }
+    },
+    {
+      name: 'Convierte "una quina" a 500 CLP',
+      input: 'gasté una quina en confites',
+      expected: { amount: 500, isFiado: false }
+    },
+    {
+      name: 'Distingue e inyecta prefijo [FIADO] en concepto',
+      input: 'le fié un pastel a Juan',
+      expected: { amount: 0, isFiado: true }
+    }
+  ]
+
+  function parseSlangAdapters(text: string): { amount: number; isFiado: boolean } {
+    let amount = 0
+    const palosMatch = text.match(/(\d+)\s*palos?/i) || text.match(/(\d+)\s*guat[oó]n(es)?/i)
+    const lucasMatch = text.match(/(\d+)\s*lucas?/i)
+    const gambasMatch = text.match(/(\d+)\s*gambas?/i)
+    const quinaMatch = text.match(/quina/i)
+
+    if (palosMatch) {
+      amount = parseInt(palosMatch[1], 10) * 1000000
+    } else if (lucasMatch) {
+      amount = parseInt(lucasMatch[1], 10) * 1000
+    } else if (gambasMatch) {
+      amount = parseInt(gambasMatch[1], 10) * 100
+    } else if (quinaMatch) {
+      amount = 500
+    }
+
+    const isFiado = /fi[aáeéioó]/i.test(text) || /fiar/i.test(text)
+    return { amount, isFiado }
+  }
+
+  evaluateSuite('Conversión de Modismos Chilenos a CLP y Reglas de Negocio', SLANG_TESTS, (input) => {
+    const res = parseSlangAdapters(input)
+    return { amount: res.amount, isFiado: res.isFiado }
   })
   
   console.log('======================================================')

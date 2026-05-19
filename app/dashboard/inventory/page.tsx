@@ -62,22 +62,54 @@ export default function InventoryPage() {
   const [editOpen, setEditOpen] = useState(false)
   // Form unificado
   const [form, setForm] = useState(emptyForm)
+  const [userId, setUserId] = useState<string | null>(null)
 
   const supabase = createClient()
 
-  const fetchInventory = async () => {
-    const { data } = await supabase.from('inventory').select('*').order('name', { ascending: true })
+  const fetchInventory = async (uid?: string) => {
+    const activeUserId = uid || userId
+    if (!activeUserId) return
+    const { data } = await supabase
+      .from('inventory')
+      .select('*')
+      .eq('user_id', activeUserId)
+      .order('name', { ascending: true })
     setItems(data || [])
     setLoading(false)
   }
 
   useEffect(() => {
-    fetchInventory()
-    const channel = supabase
-      .channel('inv-rt')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'inventory' }, fetchInventory)
-      .subscribe()
-    return () => { supabase.removeChannel(channel) }
+    let channel: any
+
+    async function init() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      
+      setUserId(user.id)
+      await fetchInventory(user.id)
+      
+      channel = supabase
+        .channel(`inv-rt-${user.id}`)
+        .on(
+          'postgres_changes',
+          { 
+            event: '*', 
+            schema: 'public', 
+            table: 'inventory', 
+            filter: `user_id=eq.${user.id}` 
+          }, 
+          () => fetchInventory(user.id)
+        )
+        .subscribe()
+    }
+
+    init()
+
+    return () => { 
+      if (channel) {
+        supabase.removeChannel(channel) 
+      }
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 

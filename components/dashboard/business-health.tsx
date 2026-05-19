@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useDashboard } from '@/components/dashboard/dashboard-context'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Activity, TrendingUp, TrendingDown, AlertTriangle, Loader2, Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -41,26 +41,7 @@ const statusConfig: Record<HealthStatus, { color: string; bg: string; bar: strin
 }
 
 export function BusinessHealth({ monthlyIncome, monthlyExpenses }: BusinessHealthProps) {
-  const [loading, setLoading] = useState(true)
-  const [aiAnalysis, setAiAnalysis] = useState<{
-    health: { status: HealthStatus; percentage: number; message: string }
-    projection: string
-  } | null>(null)
-
-  useEffect(() => {
-    async function fetchInsights() {
-      try {
-        const res = await fetch('/api/insights')
-        const data = await res.json()
-        setAiAnalysis(data)
-      } catch (e) {
-        console.error('Error fetching insights:', e)
-      } finally {
-        setLoading(false)
-      }
-    }
-    fetchInsights()
-  }, [])
+  const { insights: aiAnalysis, loading } = useDashboard()
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('es-CL', {

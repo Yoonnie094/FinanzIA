@@ -1,7 +1,9 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { DashboardNav } from '@/components/dashboard/dashboard-nav'
-import { FloatingChat } from '@/components/dashboard/floating-chat'
+import dynamic from 'next/dynamic'
+
+const FloatingChat = dynamic(() => import('@/components/dashboard/floating-chat').then(mod => mod.FloatingChat))
 
 export default async function DashboardLayout({
   children,

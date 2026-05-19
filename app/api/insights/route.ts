@@ -15,24 +15,28 @@ export async function GET() {
     return new Response('No autorizado', { status: 401 })
   }
 
-  // 1. Obtener datos financieros recientes
-  const { data: transactions } = await supabase
-    .from('transactions')
-    .select('*')
-    .eq('user_id', user.id)
-    .order('date', { ascending: false })
-    .limit(100)
+  // 1. Obtener datos financieros y configuración de forma paralela
+  const [transactionsResult, businessResult, goalsResult] = await Promise.all([
+    supabase
+      .from('transactions')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('date', { ascending: false })
+      .limit(100),
+    supabase
+      .from('businesses')
+      .select('*')
+      .eq('user_id', user.id)
+      .single(),
+    supabase
+      .from('financial_goals')
+      .select('*')
+      .eq('user_id', user.id)
+  ])
 
-  const { data: business } = await supabase
-    .from('businesses')
-    .select('*')
-    .eq('user_id', user.id)
-    .single()
-
-  const { data: goals } = await supabase
-    .from('financial_goals')
-    .select('*')
-    .eq('user_id', user.id)
+  const transactions = transactionsResult.data
+  const business = businessResult.data
+  const goals = goalsResult.data
 
   if (!transactions || transactions.length === 0) {
     return Response.json({

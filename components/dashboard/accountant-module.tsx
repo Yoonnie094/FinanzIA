@@ -17,6 +17,8 @@ import { cn } from '@/lib/utils'
 import type { Transaction } from '@/lib/types'
 import { motion, AnimatePresence } from 'framer-motion'
 
+import { useDashboard } from '@/components/dashboard/dashboard-context'
+
 interface AccountantModuleProps {
   monthlyIncome: number
   monthlyExpenses: number
@@ -32,27 +34,8 @@ interface Tip {
 }
 
 export function AccountantModule({ monthlyIncome, monthlyExpenses, totalTransactions, transactions }: AccountantModuleProps) {
-  const [loading, setLoading] = useState(true)
-  const [tips, setTips] = useState<Tip[]>([])
-
-  useEffect(() => {
-    async function fetchTips() {
-      try {
-        const res = await fetch('/api/insights')
-        const data = await res.json()
-        if (data.tips) setTips(data.tips)
-      } catch (e) {
-        console.error('Error fetching AI tips:', e)
-        // Fallback tips
-        setTips([
-          { id: '1', title: 'Revisión mensual', description: 'No olvides revisar tus gastos fijos este mes.', type: 'info' }
-        ])
-      } finally {
-        setLoading(false)
-      }
-    }
-    fetchTips()
-  }, [])
+  const { insights: aiAnalysis, loading } = useDashboard()
+  const tips = aiAnalysis?.tips || []
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('es-CL', {
