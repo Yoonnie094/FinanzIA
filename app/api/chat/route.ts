@@ -149,24 +149,44 @@ ${conversationText}
 Escribe el resumen en un solo párrafo corto (máximo 120 palabras), en español neutro con jerga contable limpia. No agregues saludos ni explicaciones.`
 
     let summaryText = ''
-    try {
-      const { text } = await generateText({
-        model: groq('llama-3.1-8b-instant'),
-        prompt: summaryPrompt,
-      })
-      summaryText = text
-    } catch (groqErr) {
-      console.warn('⚠️ Falló resumen con Groq Llama-3.1-8b, reintentando con Gemini...', groqErr)
-      if (process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
-        try {
-          const { text } = await generateText({
-            model: google('gemini-1.5-flash'),
-            prompt: summaryPrompt,
-          })
-          summaryText = text
-        } catch (geminiErr) {
-          console.error('❌ Todos los proveedores fallaron al resumir conversación:', geminiErr)
+    const isMockGoogleKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY === 'AIzaSyA8vJQoZzY3eCxWqR13kUhSD2Gobhf-X4I' ||
+                            process.env.GOOGLE_GENERATIVE_AI_API_KEY?.startsWith('mock_') ||
+                            !process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+    const hasGemini = !!process.env.GOOGLE_GENERATIVE_AI_API_KEY && !isMockGoogleKey
+
+    const isMockGroqKey = process.env.GROQ_API_KEY?.startsWith('mock_') || !process.env.GROQ_API_KEY;
+    const hasGroq = !!process.env.GROQ_API_KEY && !isMockGroqKey
+
+    if (hasGroq) {
+      try {
+        const { text } = await generateText({
+          model: groq('llama-3.1-8b-instant'),
+          prompt: summaryPrompt,
+        })
+        summaryText = text
+      } catch (groqErr) {
+        console.warn('⚠️ Falló resumen con Groq Llama-3.1-8b, reintentando con Gemini...', groqErr)
+        if (hasGemini) {
+          try {
+            const { text } = await generateText({
+              model: google('gemini-1.5-flash'),
+              prompt: summaryPrompt,
+            })
+            summaryText = text
+          } catch (geminiErr) {
+            console.error('❌ Todos los proveedores fallaron al resumir conversación:', geminiErr)
+          }
         }
+      }
+    } else if (hasGemini) {
+      try {
+        const { text } = await generateText({
+          model: google('gemini-1.5-flash'),
+          prompt: summaryPrompt,
+        })
+        summaryText = text
+      } catch (geminiErr) {
+        console.error('❌ Todos los proveedores fallaron al resumir conversación con Gemini:', geminiErr)
       }
     }
     
@@ -710,27 +730,52 @@ Usa este contexto para dar consejos financieros PROFUNDOS y personalizados.`
                           process.env.GOOGLE_GENERATIVE_AI_API_KEY?.startsWith('mock_') ||
                           !process.env.GOOGLE_GENERATIVE_AI_API_KEY;
   const hasGemini = !!process.env.GOOGLE_GENERATIVE_AI_API_KEY && !isMockGoogleKey
-  const isComplex = isComplexQuery(lastUserText)
-  
-  // Enrutamiento dinámico optimizado por latencia extrema:
-  // Si la consulta es simple (saludos o charlas cortas), usamos Groq Llama 3.1 8B por su velocidad extrema (TTFT < 100ms).
-  // Si es compleja, priorizamos Gemini 1.5 Flash (si está disponible) por sus capacidades de tool calling y razonamiento estructurado.
-  // Como fallback final, usamos Groq Llama 3.3 70B para consultas complejas o Llama 3.1 8B para consultas simples.
-  const useGemini = hasGemini && isComplex
 
-  const primaryModel = useGemini
-    ? google('gemini-1.5-flash')
-    : (isComplex ? groq('llama-3.3-70b-versatile') : groq('llama-3.1-8b-instant'))
-  const primaryModelName = useGemini
-    ? 'google-gemini-1.5-flash'
-    : (isComplex ? 'groq-llama-3.3-70b-versatile' : 'groq-llama-3.1-8b-instant')
-  
-  const fallbackModel = useGemini
-    ? groq('llama-3.3-70b-versatile')
-    : (hasGemini ? google('gemini-1.5-flash') : (isComplex ? groq('llama-3.1-8b-instant') : groq('llama-3.3-70b-versatile')))
-  const fallbackModelName = useGemini
-    ? 'groq-llama-3.3-70b-versatile'
-    : (hasGemini ? 'google-gemini-1.5-flash' : (isComplex ? 'groq-llama-3.1-8b-instant' : 'groq-llama-3.3-70b-versatile'))
+  const isMockGroqKey = process.env.GROQ_API_KEY?.startsWith('mock_') || !process.env.GROQ_API_KEY;
+  const hasGroq = !!process.env.GROQ_API_KEY && !isMockGroqKey
+
+  const isComplex = isComplexQuery(lastUserText)
+
+  let primaryModel: any
+  let primaryModelName: string
+  let fallbackModel: any
+  let fallbackModelName: string
+
+  if (hasGemini && hasGroq) {
+    if (isComplex) {
+      primaryModel = google('gemini-1.5-flash')
+      primaryModelName = 'google-gemini-1.5-flash'
+      fallbackModel = groq('llama-3.3-70b-versatile')
+      fallbackModelName = 'groq-llama-3.3-70b-versatile'
+    } else {
+      primaryModel = groq('llama-3.1-8b-instant')
+      primaryModelName = 'groq-llama-3.1-8b-instant'
+      fallbackModel = google('gemini-1.5-flash')
+      fallbackModelName = 'google-gemini-1.5-flash'
+    }
+  } else if (hasGemini) {
+    primaryModel = google('gemini-1.5-flash')
+    primaryModelName = 'google-gemini-1.5-flash'
+    fallbackModel = google('gemini-1.5-flash')
+    fallbackModelName = 'google-gemini-1.5-flash-retry'
+  } else if (hasGroq) {
+    if (isComplex) {
+      primaryModel = groq('llama-3.3-70b-versatile')
+      primaryModelName = 'groq-llama-3.3-70b-versatile'
+      fallbackModel = groq('llama-3.1-8b-instant')
+      fallbackModelName = 'groq-llama-3.1-8b-instant'
+    } else {
+      primaryModel = groq('llama-3.1-8b-instant')
+      primaryModelName = 'groq-llama-3.1-8b-instant'
+      fallbackModel = groq('llama-3.3-70b-versatile')
+      fallbackModelName = 'groq-llama-3.3-70b-versatile'
+    }
+  } else {
+    primaryModel = groq('llama-3.1-8b-instant')
+    primaryModelName = 'groq-llama-3.1-8b-instant-default'
+    fallbackModel = google('gemini-1.5-flash')
+    fallbackModelName = 'google-gemini-1.5-flash-default'
+  }
 
   console.log(`[Dynamic Router] Petición del usuario clasificada como: ${isComplex ? 'COMPLEJA' : 'SIMPLE'}. Modelo principal: ${primaryModelName}`)
 
