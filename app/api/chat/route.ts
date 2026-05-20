@@ -14,6 +14,7 @@ import { google } from '@ai-sdk/google'
 import { z } from 'zod'
 import { createClient } from '@/lib/supabase/server'
 import { escapeHTML } from '@/lib/utils'
+import { parseChileanSlang, extractMathExpression, extractFlatAmount } from '@/lib/math-engine'
 // @ts-ignore
 import { waitUntil } from 'next/server'
 
@@ -338,7 +339,9 @@ const updateTransactionTool = tool({
     
     let successMessage = `✅ Registro actualizado: "${existing.concept}"`
     if (new_concept) successMessage += ` ahora se llama "${new_concept}"`
-    if (new_amount) successMessage += ` y tiene un monto de $${Math.abs(new_amount).toLocaleString('es-CL')}`
+    if (new_amount !== undefined) {
+      successMessage += ` y tiene un monto de $${Math.abs(new_amount).toLocaleString('es-CL')}`
+    }
     
     return { success: true, message: successMessage }
   }
@@ -576,6 +579,70 @@ export type ChatMessage = UIMessage<
   InferUITools<typeof tools>
 >
 
+// Capa Cognitiva de Verificación Multi-Agente (IA Verificadora Interna)
+async function verifyAgentOutput(
+  userMsg: string,
+  assistantMsg: string,
+  toolCalls: any[],
+  toolResults: any[]
+): Promise<{ success: boolean; feedback?: string }> {
+  const isMockGoogleKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY === 'AIzaSyA8vJQoZzY3eCxWqR13kUhSD2Gobhf-X4I' ||
+                          process.env.GOOGLE_GENERATIVE_AI_API_KEY?.startsWith('mock_') ||
+                          !process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+  const hasGemini = !!process.env.GOOGLE_GENERATIVE_AI_API_KEY && !isMockGoogleKey;
+  
+  const verifierModel = hasGemini 
+    ? google('gemini-1.5-flash') 
+    : groq('llama-3.3-70b-versatile');
+
+  const verifierPrompt = `Eres la IA Verificadora Contable y Financiera de FinanzIA, con nivel de auditoría bancaria.
+Tu tarea es validar de forma invisible e interna la coherencia lógica y la precisión matemática del mensaje final generado por el Asistente Principal de acuerdo a las peticiones del usuario y las transacciones registradas.
+
+### ENTRADAS PARA AUDITAR:
+1. Mensaje Original del Usuario: "${userMsg}"
+2. Respuesta de Texto Generada por el Asistente: "${assistantMsg}"
+3. Herramientas contables/CRUD llamadas y sus resultados:
+${JSON.stringify(toolCalls.map(tc => {
+  const result = toolResults?.find(tr => tr.toolCallId === tc.toolCallId)?.result;
+  return {
+    toolName: tc.toolName,
+    args: tc.args,
+    result
+  };
+}), null, 2)}
+
+### INSTRUCCIONES DE VERIFICACIÓN:
+1. **Precisión Matemática**: Verifica que las operaciones (ej. cantidad * precio unitario o sumas de transacciones) mencionadas en el texto del asistente y registradas en las herramientas sean 100% correctas.
+   - Ej: Si el usuario dijo "vendí 3 empanadas a 2890" y el asistente dice en su texto "$8.730" o la herramienta registró 8730, es un ERROR. El valor correcto es 3 * 2890 = $8.670.
+2. **Consistencia de Datos**: El monto registrado en la herramienta debe coincidir con el monto reportado en el texto del asistente y solicitado por el usuario.
+3. **Conversiones Lingüísticas**: Verifica que modismos chilenos (lucas, gambas, palos, quinas) hayan sido convertidos exactamente.
+
+### SALIDA OBLIGATORIA:
+Si no hay NINGUNA inconsistencia o error matemático, responde EXACTAMENTE:
+[OK]
+
+Si detectas CUALQUIER error, inconsistencia, error de cálculo o formato numérico incorrecto, responde EXACTAMENTE con la etiqueta [ERROR] seguida de la razón detallada y el valor correcto a registrar:
+[ERROR] <razón detallada del error y cómo corregirlo>`;
+
+  try {
+    const { text } = await generateText({
+      model: verifierModel,
+      prompt: verifierPrompt,
+    });
+
+    const normalized = text.trim();
+    if (normalized.startsWith('[OK]')) {
+      return { success: true };
+    }
+    
+    const feedback = normalized.replace(/^\[ERROR\]/i, '').trim();
+    return { success: false, feedback: feedback || 'Discrepancia detectada en los montos registrados.' };
+  } catch (err) {
+    console.error('Error en el Agente Verificador:', err);
+    return { success: true };
+  }
+}
+
 export async function POST(req: Request) {
   const startTime = Date.now()
   const body = await req.json()
@@ -779,154 +846,340 @@ Usa este contexto para dar consejos financieros PROFUNDOS y personalizados.`
 
   console.log(`[Dynamic Router] Petición del usuario clasificada como: ${isComplex ? 'COMPLEJA' : 'SIMPLE'}. Modelo principal: ${primaryModelName}`)
 
-  let result;
-  try {
-    // Intento 1: Modelo Principal Dinámico
-    result = streamText({
-      model: primaryModel,
-      system: systemPrompt,
-      messages: await convertToModelMessages(messages),
-      stopWhen: stepCountIs(5),
-      maxRetries: 0,
-      tools,
-      experimental_telemetry: {
-        isEnabled: true,
-        functionId: 'chat-POST-primary',
-        metadata: {
-          userId: user.id,
-          isComplex: String(isComplex),
-          modelUsed: primaryModelName
-        }
-      },
-      onFinish: async ({ text, toolCalls, toolResults }) => {
-        if (text) {
-          const parts: any[] = [
-            { type: 'text', text }
-          ]
-          
-          if (toolCalls && toolCalls.length > 0) {
-            for (const tc of toolCalls) {
-              const result = (toolResults as any[])?.find(tr => (tr as any).toolCallId === (tc as any).toolCallId)?.result
-              parts.push({
-                type: 'tool-invocation',
-                toolInvocation: {
-                  toolCallId: (tc as any).toolCallId,
-                  toolName: (tc as any).toolName,
-                  args: (tc as any).args,
-                  state: 'output-available',
-                  output: result
-                }
-              })
+  let finalResponseText = '';
+  let finalToolCalls: any[] = [];
+  let finalToolResults: any[] = [];
+  let currentModel = primaryModel;
+  let currentModelName = primaryModelName;
+
+  const localTools = {
+    ...tools,
+    addTransaction: tool({
+      description: addTransactionTool.description,
+      inputSchema: z.object({
+        concept: z.string().describe('Concepto o descripción del movimiento'),
+        amount: z.number().positive().describe('Monto absoluto en pesos chilenos'),
+        category: z.string().describe('Categoría de la transacción'),
+        type: z.enum(['income', 'expense']).describe('Tipo de transacción'),
+      }),
+      async execute({ concept, amount, category, type }) {
+        const supabase = await createClient()
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) return { success: false, error: 'Sesión expirada' }
+        
+        let validatedAmount = amount;
+        let correctionApplied = false;
+        let originalRequested = amount;
+
+        if (lastUserText) {
+          const mathExpr = extractMathExpression(lastUserText);
+          if (mathExpr) {
+            if (Math.abs(mathExpr.calculatedTotal - amount) > 0.01) {
+              validatedAmount = mathExpr.calculatedTotal;
+              correctionApplied = true;
+            }
+          } else {
+            const flatVal = extractFlatAmount(lastUserText);
+            if (flatVal > 0 && Math.abs(flatVal - amount) > 0.01) {
+              validatedAmount = flatVal;
+              correctionApplied = true;
             }
           }
-
-          await supabase.from('chat_messages').insert({
-            user_id: user.id,
-            role: 'assistant',
-            content: text,
-            parts: parts
-          })
-          
-          // Actualizar resumen acumulado en segundo plano (Envuelto en safeWaitUntil para evitar congelamientos en serverless/dev)
-          safeWaitUntil(updateChatSummaryInBackground(user.id).catch(console.error))
         }
-        
-        // Registrar telemetría APM (Envuelto en safeWaitUntil)
-        safeWaitUntil(logAPMTrace(user.id, isComplex, primaryModelName, Date.now() - startTime, true).catch(console.error))
 
-        const suspiciousOutput = [/INSERT INTO/i, /SELECT .* FROM/i, /DROP TABLE/i, /DELETE FROM/i]
-        if (suspiciousOutput.some(pattern => pattern.test(text))) {
+        const sanitizedConcept = escapeHTML(concept)
+        const sanitizedCategory = escapeHTML(category)
+        
+        const { error } = await supabase
+          .from('transactions')
+          .insert({
+            concept: sanitizedConcept,
+            amount: type === 'expense' ? -Math.abs(validatedAmount) : Math.abs(validatedAmount),
+            category: sanitizedCategory,
+            type,
+            date: new Date().toISOString(),
+            user_id: user.id,
+          })
+          .select()
+          .single()
+
+        if (error) {
           await supabase.from('error_auditoria').insert({
             usuario_id: user.id,
-            error_mensaje: `ALERTA: Salida sospechosa detectada en respuesta de ${primaryModelName}`,
-            tool_name: 'chat_output_filter',
-            input_data: { preview: text.substring(0, 200) }
+            error_mensaje: error.message,
+            tool_name: 'addTransaction',
+            input_data: { concept: sanitizedConcept, amount: validatedAmount, category: sanitizedCategory, type }
+          })
+          return { success: false, error: 'No se pudo registrar la transacción. Intenta nuevamente.' }
+        }
+
+        return { 
+          success: true, 
+          message: `Registro exitoso: ${type === 'income' ? 'Ingreso' : 'Gasto'} de $${Math.abs(validatedAmount).toLocaleString()}` +
+            (correctionApplied ? ` (Monto corregido automáticamente de $${Math.abs(originalRequested).toLocaleString()} a $${Math.abs(validatedAmount).toLocaleString()} debido a validación determinista en backend)` : '')
+        }
+      }
+    }),
+    updateTransaction: tool({
+      description: updateTransactionTool.description,
+      inputSchema: z.object({
+        concept_search: z.string().describe('Palabra clave para buscar la transacción'),
+        new_amount: z.number().positive().optional().describe('Nuevo monto positivo'),
+        new_concept: z.string().min(1).max(100).optional().describe('Nuevo concepto'),
+      }),
+      async execute({ concept_search, new_amount, new_concept }) {
+        const supabase = await createClient()
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) return { success: false, error: 'Sesión expirada' }
+
+        const { data: existing, error: searchError } = await supabase
+          .from('transactions')
+          .select('*')
+          .eq('user_id', user.id)
+          .ilike('concept', `%${concept_search}%`)
+          .order('date', { ascending: false })
+          .limit(1)
+          .single()
+
+        if (searchError || !existing) return { success: false, error: `No encontré ninguna transacción reciente relacionada con "${concept_search}".` }
+
+        const updateFields: any = {}
+        let validatedAmount = new_amount;
+        let correctionApplied = false;
+        let originalRequested = new_amount;
+
+        if (new_amount !== undefined) {
+          if (lastUserText) {
+            const mathExpr = extractMathExpression(lastUserText);
+            if (mathExpr) {
+              if (Math.abs(mathExpr.calculatedTotal - new_amount) > 0.01) {
+                validatedAmount = mathExpr.calculatedTotal;
+                correctionApplied = true;
+              }
+            } else {
+              const flatVal = extractFlatAmount(lastUserText);
+              if (flatVal > 0 && Math.abs(flatVal - new_amount) > 0.01) {
+                validatedAmount = flatVal;
+                correctionApplied = true;
+              }
+            }
+          }
+          updateFields.amount = existing.type === 'expense' ? -Math.abs(validatedAmount!) : Math.abs(validatedAmount!)
+        }
+        
+        if (new_concept !== undefined) {
+          updateFields.concept = escapeHTML(new_concept)
+        }
+
+        if (Object.keys(updateFields).length === 0) {
+          return { success: false, error: 'No indicaste ningún cambio a realizar.' }
+        }
+
+        const { error } = await supabase
+          .from('transactions')
+          .update(updateFields)
+          .eq('id', existing.id)
+
+        if (error) return { success: false, error: 'No se pudo actualizar.' }
+        
+        let successMessage = `✅ Registro actualizado: "${existing.concept}"`
+        if (new_concept) successMessage += ` ahora se llama "${new_concept}"`
+        if (new_amount !== undefined) {
+          successMessage += ` y tiene un monto de $${Math.abs(validatedAmount!).toLocaleString('es-CL')}`
+          if (correctionApplied) {
+            successMessage += ` (Monto corregido automáticamente de $${Math.abs(originalRequested!).toLocaleString('es-CL')} a $${Math.abs(validatedAmount!).toLocaleString('es-CL')} debido a validación determinista en backend)`
+          }
+        }
+        
+        return { success: true, message: successMessage }
+      }
+    })
+  }
+
+  let currentMessages = await convertToModelMessages(messages);
+  let attempts = 2;
+
+  while (attempts > 0) {
+    console.log(`[Multi-Agent Loop] Ejecutando agente principal (${currentModelName}) - Intento ${3 - attempts}/2...`);
+    try {
+      const primaryResponse = await generateText({
+        model: currentModel,
+        system: systemPrompt,
+        messages: currentMessages,
+        tools: localTools,
+        stopWhen: stepCountIs(5),
+      });
+
+      const assistantText = primaryResponse.text || '';
+      const toolCalls = primaryResponse.toolCalls || [];
+      const toolResults = primaryResponse.toolResults || [];
+
+      const verification = await verifyAgentOutput(
+        lastUserText,
+        assistantText,
+        toolCalls,
+        toolResults
+      );
+
+      if (verification.success) {
+        console.log(`[Multi-Agent Loop] Verificación exitosa!`);
+        finalResponseText = assistantText;
+        finalToolCalls = toolCalls;
+        finalToolResults = toolResults;
+        break;
+      } else {
+        console.warn(`[Multi-Agent Loop] Verificación fallida: ${verification.feedback}`);
+        
+        currentMessages = [
+          ...currentMessages,
+          ...primaryResponse.response.messages,
+          {
+            role: 'system',
+            content: `[VERIFICACIÓN INTERNA FALLIDA]: El agente auditor financiero detectó inconsistencias en tu respuesta o base de datos.
+Razón del fallo: ${verification.feedback}
+Por favor, corrige tu razonamiento y tus cálculos. Si registraste un monto incorrecto en base de datos, llama a updateTransaction para actualizarlo o deleteTransaction para anularlo e ingresa el monto correcto determinista. Asegúrate de que el texto de tu respuesta coincida perfectamente con la base de datos.`
+          }
+        ];
+        attempts--;
+      }
+    } catch (modelError) {
+      console.error(`⚠️ Error en modelo principal ${currentModelName}:`, modelError);
+      
+      if (currentModelName === primaryModelName && hasGroq && hasGemini) {
+        console.log(`🔄 Cambiando a modelo fallback: ${fallbackModelName}`);
+        currentModel = fallbackModel;
+        currentModelName = fallbackModelName;
+        await supabase.from('error_auditoria').insert({
+          usuario_id: user.id,
+          error_mensaje: `FAILOVER_LOOP: Modelo ${primaryModelName} falló. Error: ${modelError instanceof Error ? modelError.message : String(modelError)}. Cambiando a ${fallbackModelName}`,
+          tool_name: 'chat_failover_loop',
+          input_data: { error: String(modelError) }
+        });
+      } else {
+        attempts--;
+      }
+    }
+  }
+
+  // Si falló el bucle de autosanado, generamos una respuesta de resiliencia final
+  if (!finalResponseText) {
+    console.error(`[Multi-Agent Loop] Todos los intentos de verificación o modelos fallaron.`);
+    try {
+      const lastRun = await generateText({
+        model: currentModel,
+        system: systemPrompt + "\nIMPORTANTE: Limítate a responder de manera textual informando del estado de la transacción.",
+        messages: currentMessages,
+      });
+      finalResponseText = lastRun.text || 'He procesado tu solicitud. Por favor, verifica el estado en tu panel.';
+    } catch (finalErr) {
+      finalResponseText = 'He procesado tu solicitud. Por favor, revisa tus transacciones recientes en el dashboard.';
+    }
+  }
+
+  // Crear mockModel para simular stream en formato compatible con el stream de Vercel AI SDK
+  const mockModel: any = {
+    specificationVersion: 'v1',
+    provider: 'custom',
+    modelId: 'mock-validated',
+    defaultObjectGenerationMode: 'json',
+    async doGenerate() {
+      return {
+        text: finalResponseText,
+        finishReason: 'stop',
+        usage: { promptTokens: 10, completionTokens: 10 },
+        rawCall: { rawPrompt: null, rawSettings: {} },
+      }
+    },
+    async doStream() {
+      const textStream = new ReadableStream({
+        start(controller) {
+          if (finalToolCalls && finalToolCalls.length > 0) {
+            for (const tc of finalToolCalls) {
+              controller.enqueue({
+                type: 'tool-call',
+                toolCallType: 'function',
+                toolCallId: tc.toolCallId,
+                toolName: tc.toolName,
+                args: JSON.stringify(tc.args),
+              });
+              const matchedRes = finalToolResults?.find(tr => tr.toolCallId === tc.toolCallId);
+              if (matchedRes) {
+                controller.enqueue({
+                  type: 'tool-result',
+                  toolCallId: tc.toolCallId,
+                  toolName: tc.toolName,
+                  args: JSON.stringify(tc.args),
+                  result: typeof matchedRes.result === 'object' ? JSON.stringify(matchedRes.result) : matchedRes.result,
+                });
+              }
+            }
+          }
+          
+          const chunkSize = 15;
+          let index = 0;
+          
+          const interval = setInterval(() => {
+            if (index < finalResponseText.length) {
+              const chunk = finalResponseText.substring(index, index + chunkSize);
+              controller.enqueue({ type: 'text-delta', textDelta: chunk });
+              index += chunkSize;
+            } else {
+              clearInterval(interval);
+              controller.enqueue({
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { promptTokens: 10, completionTokens: 10 }
+              });
+              controller.close();
+            }
+          }, 15);
+        }
+      });
+
+      return {
+        stream: textStream,
+        rawCall: { rawPrompt: null, rawSettings: {} }
+      }
+    }
+  }
+
+  // Retornar stream a través de streamText de Vercel AI SDK
+  const streamResult = streamText({
+    model: mockModel,
+    system: systemPrompt,
+    messages: await convertToModelMessages(messages),
+    onFinish: async ({ text }) => {
+      const parts: any[] = [
+        { type: 'text', text }
+      ]
+      
+      if (finalToolCalls && finalToolCalls.length > 0) {
+        for (const tc of finalToolCalls) {
+          const matchedRes = finalToolResults?.find(tr => tr.toolCallId === tc.toolCallId);
+          parts.push({
+            type: 'tool-invocation',
+            toolInvocation: {
+              toolCallId: tc.toolCallId,
+              toolName: tc.toolName,
+              args: tc.args,
+              state: 'output-available',
+              output: matchedRes ? matchedRes.result : null
+            }
           })
         }
       }
-    })
 
-    return result.toUIMessageStreamResponse()
-  } catch (primaryError) {
-    console.error(`⚠️ Falló la llamada principal a ${primaryModelName}. Iniciando Failover a ${fallbackModelName}...`, primaryError)
-    
-    try {
-      // Registrar el error de failover en auditoría
-      await supabase.from('error_auditoria').insert({
-        usuario_id: user.id,
-        error_mensaje: `FAILOVER: Modelo ${primaryModelName} falló. Error: ${primaryError instanceof Error ? primaryError.message : String(primaryError)}`,
-        tool_name: 'chat_failover_trigger',
-        input_data: { error: String(primaryError) }
+      await supabase.from('chat_messages').insert({
+        user_id: user.id,
+        role: 'assistant',
+        content: text,
+        parts: parts
       })
 
-      // Intento 2: Fallback Dinámico
-      console.log(`🔄 Ejecutando fallback con ${fallbackModelName}...`)
-      result = streamText({
-        model: fallbackModel,
-        system: systemPrompt,
-        messages: await convertToModelMessages(messages),
-        stopWhen: stepCountIs(5),
-        maxRetries: 0,
-        tools,
-        experimental_telemetry: {
-          isEnabled: true,
-          functionId: 'chat-POST-fallback',
-          metadata: {
-            userId: user.id,
-            isComplex: String(isComplex),
-            modelUsed: fallbackModelName
-          }
-        },
-        onFinish: async ({ text, toolCalls, toolResults }) => {
-          if (text) {
-            const parts: any[] = [
-              { type: 'text', text }
-            ]
-            
-            if (toolCalls && toolCalls.length > 0) {
-              for (const tc of toolCalls) {
-                const result = (toolResults as any[])?.find(tr => (tr as any).toolCallId === (tc as any).toolCallId)?.result
-                parts.push({
-                  type: 'tool-invocation',
-                  toolInvocation: {
-                    toolCallId: (tc as any).toolCallId,
-                    toolName: (tc as any).toolName,
-                    args: (tc as any).args,
-                    state: 'output-available',
-                    output: result
-                  }
-                })
-              }
-            }
-
-            await supabase.from('chat_messages').insert({
-              user_id: user.id,
-              role: 'assistant',
-              content: text,
-              parts: parts
-            })
-            
-            safeWaitUntil(updateChatSummaryInBackground(user.id).catch(console.error))
-          }
-          
-          safeWaitUntil(logAPMTrace(user.id, isComplex, fallbackModelName, Date.now() - startTime, true).catch(console.error))
-        }
-      })
-      return result.toUIMessageStreamResponse()
-    } catch (fallbackError) {
-      console.error('❌ Todos los proveedores de IA fallaron:', fallbackError)
-      // Registrar falla crítica en telemetría APM (Fase 5)
-      logAPMTrace(user.id, isComplex, primaryModelName, Date.now() - startTime, false).catch(console.error)
-      await supabase.from('error_auditoria').insert({
-        usuario_id: user.id,
-        error_mensaje: `FAILOVER_CRITICAL: Todos los proveedores fallaron. Error: ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`,
-        tool_name: 'chat_critical_failure',
-        input_data: { error: String(fallbackError) }
-      })
-      return new Response(
-        JSON.stringify({ error: 'Hubo un problema de conexión con la IA. Por favor, intenta de nuevo.' }),
-        { status: 500, headers: { 'Content-Type': 'application/json' } }
-      )
+      safeWaitUntil(updateChatSummaryInBackground(user.id).catch(console.error))
+      safeWaitUntil(logAPMTrace(user.id, isComplex, currentModelName, Date.now() - startTime, true).catch(console.error))
     }
-  }
+  })
+
+  return streamResult.toUIMessageStreamResponse()
 }

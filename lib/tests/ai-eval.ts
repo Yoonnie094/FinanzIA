@@ -1,5 +1,6 @@
 import { escapeHTML } from '../utils'
 import { z } from 'zod'
+import { parseChileanSlang, extractMathExpression, extractFlatAmount } from '../math-engine'
 
 // Patrones de inyección de prompt del backend
 function detectPromptInjection(text: string): boolean {
@@ -239,6 +240,50 @@ function runTests() {
   evaluateSuite('Conversión de Modismos Chilenos a CLP y Reglas de Negocio', SLANG_TESTS, (input) => {
     const res = parseSlangAdapters(input)
     return { amount: res.amount, isFiado: res.isFiado }
+  })
+
+  // Suite de pruebas del Motor Matemático Determinista de FinanzIA
+  const MATH_ENGINE_TESTS: TestCase<string, { total: number; slangParsed: number }>[] = [
+    {
+      name: 'Multiplicación simple: "vendí 3 empanadas a 2890"',
+      input: 'vendí 3 empanadas a 2890',
+      expected: { total: 8670, slangParsed: 2890 }
+    },
+    {
+      name: 'Multiplicación con lucas: "2 productos a 15 lucas cada uno"',
+      input: 'vendí 2 productos a 15 lucas cada uno',
+      expected: { total: 30000, slangParsed: 15000 }
+    },
+    {
+      name: 'Multiplicación con c/u y signo $: "compré 5 bebidas a $1.200 c/u"',
+      input: 'compré 5 bebidas a $1.200 c/u',
+      expected: { total: 6000, slangParsed: 1200 }
+    },
+    {
+      name: 'Multiplicación directa con x: "3x2890"',
+      input: '3x2890',
+      expected: { total: 8670, slangParsed: 2890 }
+    },
+    {
+      name: 'Sin expresión de multiplicación (solo monto plano): "gasté 20 lucas en sushi"',
+      input: 'gasté 20 lucas en sushi',
+      expected: { total: 0, slangParsed: 20000 }
+    }
+  ]
+
+  evaluateSuite('Motor Matemático Determinista y Validación de Cálculos', MATH_ENGINE_TESTS, (input) => {
+    const mathRes = extractMathExpression(input)
+    if (mathRes) {
+      return {
+        total: mathRes.calculatedTotal,
+        slangParsed: mathRes.unitPrice
+      }
+    }
+    const flatVal = extractFlatAmount(input)
+    return {
+      total: 0,
+      slangParsed: flatVal
+    }
   })
   
   console.log('======================================================')
