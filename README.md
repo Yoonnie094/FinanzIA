@@ -34,6 +34,9 @@ Sin iniciar sesión, el demo guarda movimientos localmente. Con sesión autentic
 - Alta de movimientos con categorías iniciales editables en el código.
 - Vista de movimientos y exportación CSV.
 - Modo claro y oscuro.
+- Tema que puede seguir la preferencia de luz del dispositivo.
+- Ajustes de accesibilidad: escala de lectura, escala de grises y preferencias guardadas en el navegador.
+- Navegación adaptable para teléfonos, tabletas y escritorio, con menú móvil y controles táctiles ampliados.
 - Cliente Supabase y acceso por enlace de correo.
 - Registro guiado con contexto de negocio preparado para futuras funciones de IA.
 

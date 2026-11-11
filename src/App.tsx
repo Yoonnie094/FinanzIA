@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
-import { ArrowDownLeft, ArrowLeft, ArrowRight, ArrowUpRight, BarChart3, Bell, Check, ChevronDown, ChevronLeft, CircleHelp, ClipboardList, CreditCard, Eye, FileDown, HeartHandshake, Leaf, LockKeyhole, Menu, Moon, Plus, ShieldCheck, Sparkles, Store, Sun, Wallet, X } from 'lucide-react'
+import { Accessibility, ArrowDownLeft, ArrowLeft, ArrowRight, ArrowUpRight, BarChart3, Bell, Check, ChevronDown, ChevronLeft, CircleHelp, ClipboardList, CreditCard, Eye, FileDown, HeartHandshake, Leaf, LockKeyhole, Menu, Moon, Plus, ShieldCheck, SlidersHorizontal, Sparkles, Store, Sun, Wallet, X } from 'lucide-react'
 import { incomeCategories, expenseCategories, initialMovements, type Movement, type MovementType } from './types'
 import { loadMovements, saveMovement } from './lib/movements'
 import { supabase, supabaseConfigured } from './lib/supabase'
@@ -10,6 +10,8 @@ type WorkspaceView = 'dashboard' | 'movements' | 'payments'
 type View = 'landing' | 'registration' | 'verification-pending' | 'onboarding' | WorkspaceView
 type Modal = 'movement' | 'signin' | null
 type RegistrationData = OnboardingData & { email: string; password: string }
+type ThemeChoice = 'system' | 'light' | 'dark'
+type Appearance = { theme: ThemeChoice; textScale: 1 | 1.12 | 1.25; grayscale: boolean }
 
 const AUTH_CALLBACK_PATH = '/auth/callback'
 const requiredOnboardingFields: (keyof OnboardingData)[] = ['firstName', 'businessName', 'category', 'stage', 'teamSize', 'trackingMethod', 'hasInventory', 'mainChallenge', 'mainGoal', 'preferredEntry']
@@ -18,6 +20,14 @@ function isOnboardingData(value: unknown): value is OnboardingData {
   if (!value || typeof value !== 'object') return false
   const data = value as Record<string, unknown>
   return requiredOnboardingFields.every((key) => typeof data[key] === 'string' && data[key] !== '')
+}
+
+function getSavedAppearance(): Appearance {
+  try {
+    const saved = localStorage.getItem('finanzia.appearance')
+    if (saved) return { theme: 'system', textScale: 1, grayscale: false, ...JSON.parse(saved) }
+    return { theme: localStorage.getItem('finanzia.theme') === 'dark' ? 'dark' : 'system', textScale: 1, grayscale: false }
+  } catch { return { theme: 'system', textScale: 1, grayscale: false } }
 }
 
 const clp = new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 })
@@ -32,7 +42,9 @@ function App() {
   const [view, setView] = useState<View>('landing')
   const [modal, setModal] = useState<Modal>(null)
   const [movements, setMovements] = useState<Movement[]>(initialMovements)
-  const [dark, setDark] = useState(localStorage.getItem('finanzia.theme') === 'dark')
+  const [appearance, setAppearance] = useState<Appearance>(getSavedAppearance)
+  const [systemDark, setSystemDark] = useState(() => window.matchMedia('(prefers-color-scheme: dark)').matches)
+  const [appearanceOpen, setAppearanceOpen] = useState(false)
   const [userEmail, setUserEmail] = useState<string | null>(null)
   const [pendingEmail, setPendingEmail] = useState('')
   const [authUserId, setAuthUserId] = useState<string | null>(null)
@@ -40,7 +52,22 @@ function App() {
   const [notice, setNotice] = useState('')
   const [mobileMenu, setMobileMenu] = useState(false)
 
-  useEffect(() => { document.documentElement.dataset.theme = dark ? 'dark' : 'light'; localStorage.setItem('finanzia.theme', dark ? 'dark' : 'light') }, [dark])
+  const dark = appearance.theme === 'system' ? systemDark : appearance.theme === 'dark'
+  const toggleTheme = () => setAppearance((current) => ({ ...current, theme: dark ? 'light' : 'dark' }))
+  useEffect(() => {
+    const media = window.matchMedia('(prefers-color-scheme: dark)')
+    const update = (event: MediaQueryListEvent) => setSystemDark(event.matches)
+    setSystemDark(media.matches)
+    media.addEventListener('change', update)
+    return () => media.removeEventListener('change', update)
+  }, [])
+  useEffect(() => {
+    document.documentElement.dataset.theme = dark ? 'dark' : 'light'
+    document.documentElement.dataset.grayscale = String(appearance.grayscale)
+    document.documentElement.style.zoom = String(appearance.textScale)
+    localStorage.setItem('finanzia.appearance', JSON.stringify(appearance))
+    localStorage.setItem('finanzia.theme', dark ? 'dark' : 'light')
+  }, [appearance, dark])
   useEffect(() => {
     const url = new URL(window.location.href)
     const hashParams = new URLSearchParams(url.hash.replace(/^#/, ''))
@@ -180,24 +207,27 @@ function App() {
   function navigate(next: View) { setView(next); setMobileMenu(false); window.scrollTo({ top: 0, behavior: 'smooth' }) }
 
   return <>
-    {view === 'landing' ? <Landing dark={dark} toggleTheme={() => setDark(!dark)} openDemo={() => navigate('dashboard')} openSignIn={openAccess} openRegister={() => navigate('registration')} /> :
-      view === 'registration' ? <Onboarding registration configured={supabaseConfigured} onRegister={registerUser} busy={busy} onSignOut={() => navigate('landing')} /> :
-      view === 'verification-pending' ? <VerificationPending email={pendingEmail} onBack={() => navigate('landing')} onSignIn={() => { setView('landing'); openAccess() }} /> :
-      view === 'onboarding' ? <Onboarding userEmail={userEmail || ''} onComplete={finishOnboarding} busy={busy} onSignOut={signOut} configured={supabaseConfigured} /> :
-      <Workspace view={view} navigate={navigate} movements={movements} openMovement={() => setModal('movement')} dark={dark} toggleTheme={() => setDark(!dark)} userEmail={userEmail} openSignIn={openAccess} signOut={signOut} mobileMenu={mobileMenu} setMobileMenu={setMobileMenu} />}
+    {view === 'landing' ? <Landing dark={dark} toggleTheme={toggleTheme} openAppearance={() => setAppearanceOpen(true)} openDemo={() => navigate('dashboard')} openSignIn={openAccess} openRegister={() => navigate('registration')} /> :
+      view === 'registration' ? <Onboarding registration configured={supabaseConfigured} onRegister={registerUser} busy={busy} onSignOut={() => navigate('landing')} openAppearance={() => setAppearanceOpen(true)} /> :
+      view === 'verification-pending' ? <VerificationPending email={pendingEmail} onBack={() => navigate('landing')} onSignIn={() => { setView('landing'); openAccess() }} openAppearance={() => setAppearanceOpen(true)} /> :
+      view === 'onboarding' ? <Onboarding userEmail={userEmail || ''} onComplete={finishOnboarding} busy={busy} onSignOut={signOut} configured={supabaseConfigured} openAppearance={() => setAppearanceOpen(true)} /> :
+      <Workspace view={view} navigate={navigate} movements={movements} openMovement={() => setModal('movement')} dark={dark} toggleTheme={toggleTheme} openAppearance={() => setAppearanceOpen(true)} userEmail={userEmail} openSignIn={openAccess} signOut={signOut} mobileMenu={mobileMenu} setMobileMenu={setMobileMenu} />}
     {modal === 'movement' && <MovementModal onClose={() => setModal(null)} onSubmit={addMovement} busy={busy} />}
     {modal === 'signin' && <SignInModal onClose={() => setModal(null)} onSubmit={signIn} onRegister={() => navigate('registration')} busy={busy} configured={supabaseConfigured} />}
+    {appearanceOpen && <AppearanceSettings value={appearance} onChange={setAppearance} onClose={() => setAppearanceOpen(false)} />}
     {notice && <div className="toast"><Check size={16} />{notice}<button onClick={() => setNotice('')} aria-label="Cerrar aviso"><X size={14} /></button></div>}
   </>
 }
 
-function Landing({ dark, toggleTheme, openDemo, openSignIn, openRegister }: { dark: boolean; toggleTheme: () => void; openDemo: () => void; openSignIn: () => void; openRegister: () => void }) {
+function Landing({ dark, toggleTheme, openAppearance, openDemo, openSignIn, openRegister }: { dark: boolean; toggleTheme: () => void; openAppearance: () => void; openDemo: () => void; openSignIn: () => void; openRegister: () => void }) {
+  const [mobileNavOpen, setMobileNavOpen] = useState(false)
   return <div className="landing">
     <header className="site-header wrap">
       <Brand />
       <nav className="landing-nav"><a href="#como-funciona">Cómo funciona</a><a href="#para-ti">Hecho para tu negocio</a></nav>
-      <div className="header-actions"><button className="icon-btn theme-toggle" onClick={toggleTheme} aria-label="Cambiar tema">{dark ? <Sun size={18} /> : <Moon size={18} />}</button><button className="text-button login-link" onClick={openSignIn}>Iniciar sesión</button><button className="button button-primary header-cta" onClick={openRegister}>Crear cuenta gratis <ArrowRight size={16} /></button><button className="menu-btn" aria-label="Abrir menú"><Menu size={20} /></button></div>
+      <div className="header-actions"><button className="icon-btn" onClick={openAppearance} aria-label="Ajustes de accesibilidad" title="Ajustes de accesibilidad"><Accessibility size={18} /></button><button className="icon-btn theme-toggle" onClick={toggleTheme} aria-label={dark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'} title={dark ? 'Modo claro' : 'Modo oscuro'}>{dark ? <Sun size={18} /> : <Moon size={18} />}</button><button className="text-button login-link" onClick={openSignIn}>Iniciar sesión</button><button className="button button-primary header-cta" onClick={openRegister}>Crear cuenta gratis <ArrowRight size={16} /></button><button className="menu-btn" aria-label={mobileNavOpen ? 'Cerrar menú' : 'Abrir menú'} aria-expanded={mobileNavOpen} onClick={() => setMobileNavOpen((open) => !open)}>{mobileNavOpen ? <X size={20} /> : <Menu size={20} />}</button></div>
     </header>
+    {mobileNavOpen && <nav className="mobile-nav wrap" aria-label="Menú principal"><a href="#como-funciona" onClick={() => setMobileNavOpen(false)}>Cómo funciona</a><a href="#para-ti" onClick={() => setMobileNavOpen(false)}>Hecho para tu negocio</a><button onClick={() => { setMobileNavOpen(false); openSignIn() }}>Iniciar sesión</button><button className="button button-primary" onClick={() => { setMobileNavOpen(false); openRegister() }}>Crear cuenta gratis <ArrowRight size={15} /></button></nav>}
     <main>
       <section className="hero wrap">
         <div className="hero-copy">
@@ -236,7 +266,7 @@ function Landing({ dark, toggleTheme, openDemo, openSignIn, openRegister }: { da
   </div>
 }
 
-function Workspace({ view, navigate, movements, openMovement, dark, toggleTheme, userEmail, openSignIn, signOut, mobileMenu, setMobileMenu }: { view: WorkspaceView; navigate: (view: View) => void; movements: Movement[]; openMovement: () => void; dark: boolean; toggleTheme: () => void; userEmail: string | null; openSignIn: () => void; signOut: () => void; mobileMenu: boolean; setMobileMenu: (open: boolean) => void }) {
+function Workspace({ view, navigate, movements, openMovement, dark, toggleTheme, openAppearance, userEmail, openSignIn, signOut, mobileMenu, setMobileMenu }: { view: WorkspaceView; navigate: (view: View) => void; movements: Movement[]; openMovement: () => void; dark: boolean; toggleTheme: () => void; openAppearance: () => void; userEmail: string | null; openSignIn: () => void; signOut: () => void; mobileMenu: boolean; setMobileMenu: (open: boolean) => void }) {
   const income = movements.filter((item) => item.type === 'income').reduce((sum, item) => sum + item.amount, 0)
   const expense = movements.filter((item) => item.type === 'expense').reduce((sum, item) => sum + item.amount, 0)
   const balance = income - expense
@@ -245,7 +275,7 @@ function Workspace({ view, navigate, movements, openMovement, dark, toggleTheme,
   return <div className="workspace">
     <aside className={`sidebar ${mobileMenu ? 'sidebar-open' : ''}`}><div className="side-top"><button className="brand-button" onClick={() => navigate('landing')}><Brand /></button><button className="mobile-close" aria-label="Cerrar menú" onClick={() => setMobileMenu(false)}><X size={18} /></button></div><div className="business-switch"><span className="business-avatar">M</span><span><b>Mi negocio</b><small>Plan de prueba</small></span><ChevronDown size={15} /></div><div className="nav-caption">MENÚ</div><nav className="side-nav">{nav.map((item) => <button key={item.id} className={`side-link ${view === item.id ? 'active' : ''}`} onClick={() => navigate(item.id)}><item.icon size={17} /><span>{item.label}</span>{item.id === 'payments' && <i className="nav-badge">2</i>}</button>)}</nav><div className="sidebar-bottom"><div className="help-card"><div><CircleHelp size={17} /><b>¿Necesitas ayuda?</b></div><p>Estamos aquí para acompañarte.</p><button onClick={() => navigate('landing')}>Conoce FinanzIA <ArrowRight size={13} /></button></div><button className="profile-button" onClick={userEmail ? signOut : openSignIn}><span className="profile-avatar">{userEmail ? userEmail[0].toUpperCase() : 'F'}</span><span><b>{userEmail || 'Tu espacio de prueba'}</b><small>{userEmail ? 'Cerrar sesión' : 'Datos en este dispositivo'}</small></span><ChevronDown size={14} /></button></div></aside>
     {mobileMenu && <button className="sidebar-scrim" aria-label="Cerrar menú" onClick={() => setMobileMenu(false)} />}
-    <main className="workspace-main"><header className="workspace-header"><button className="menu-btn workspace-menu" onClick={() => setMobileMenu(true)} aria-label="Abrir menú"><Menu size={20} /></button><div><div className="breadcrumb">FinanzIA <span>/</span> <b>{label}</b></div><h1>{view === 'dashboard' ? 'Tu negocio, en perspectiva' : view === 'movements' ? 'Tus movimientos' : 'Pagos en el horizonte'}</h1></div><div className="workspace-actions"><button className="icon-btn theme-toggle" onClick={toggleTheme} aria-label="Cambiar tema">{dark ? <Sun size={18} /> : <Moon size={18} />}</button><button className="icon-btn notification-btn" aria-label="Notificaciones"><Bell size={18} /><i /></button><button className="button button-primary header-add" onClick={openMovement}><Plus size={16} /> Nuevo movimiento</button></div></header>
+    <main className="workspace-main"><header className="workspace-header"><button className="menu-btn workspace-menu" onClick={() => setMobileMenu(true)} aria-label="Abrir menú" aria-expanded={mobileMenu}><Menu size={20} /></button><div><div className="breadcrumb">FinanzIA <span>/</span> <b>{label}</b></div><h1>{view === 'dashboard' ? 'Tu negocio, en perspectiva' : view === 'movements' ? 'Tus movimientos' : 'Pagos en el horizonte'}</h1></div><div className="workspace-actions"><button className="icon-btn" onClick={openAppearance} aria-label="Ajustes de accesibilidad" title="Ajustes de accesibilidad"><Accessibility size={18} /></button><button className="icon-btn theme-toggle" onClick={toggleTheme} aria-label={dark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'} title={dark ? 'Modo claro' : 'Modo oscuro'}>{dark ? <Sun size={18} /> : <Moon size={18} />}</button><button className="icon-btn notification-btn" aria-label="Notificaciones"><Bell size={18} /><i /></button><button className="button button-primary header-add" onClick={openMovement}><Plus size={16} /> Nuevo movimiento</button></div></header>
       <div className="workspace-content">
         {view === 'dashboard' && <><div className="welcome-banner"><div><span className="welcome-kicker">MIÉRCOLES, 11 DE NOVIEMBRE <span>✦</span></span><h2>Hola, qué bueno verte por aquí.</h2><p>Un paso pequeño hoy puede darte más claridad mañana.</p></div><span className="welcome-doodle">✳</span></div>
           <div className="metric-grid"><MetricCard title="Diferencia registrada" value={clp.format(balance)} caption="Ingresos menos gastos registrados" icon={Wallet} variant="purple" trend="Datos de ejemplo" /><MetricCard title="Ingresos" value={clp.format(income)} caption="En los movimientos visibles" icon={ArrowDownLeft} variant="green" trend="Entradas registradas" /><MetricCard title="Gastos" value={clp.format(expense)} caption="En los movimientos visibles" icon={ArrowUpRight} variant="peach" trend="Salidas registradas" /></div>
@@ -262,7 +292,7 @@ function Workspace({ view, navigate, movements, openMovement, dark, toggleTheme,
 
 const regionsOfChile = ['Arica y Parinacota', 'Tarapacá', 'Antofagasta', 'Atacama', 'Coquimbo', 'Valparaíso', 'Metropolitana de Santiago', "Libertador General Bernardo O’Higgins", 'Maule', 'Ñuble', 'Biobío', 'La Araucanía', 'Los Ríos', 'Los Lagos', 'Aysén', 'Magallanes y la Antártica Chilena']
 
-function Onboarding({ userEmail = '', onComplete, onRegister, busy, onSignOut, registration = false, configured = true }: { userEmail?: string; onComplete?: (answers: OnboardingData) => Promise<void>; onRegister?: (data: RegistrationData) => Promise<void>; busy: boolean; onSignOut: () => void; registration?: boolean; configured?: boolean }) {
+function Onboarding({ userEmail = '', onComplete, onRegister, busy, onSignOut, openAppearance, registration = false, configured = true }: { userEmail?: string; onComplete?: (answers: OnboardingData) => Promise<void>; onRegister?: (data: RegistrationData) => Promise<void>; busy: boolean; onSignOut: () => void; openAppearance: () => void; registration?: boolean; configured?: boolean }) {
   const [step, setStep] = useState(1)
   const [answers, setAnswers] = useState<Partial<OnboardingData>>({})
   const [error, setError] = useState('')
@@ -301,7 +331,7 @@ function Onboarding({ userEmail = '', onComplete, onRegister, busy, onSignOut, r
   }
 
   return <main className="onboarding-page">
-    <header className="onboarding-header"><Brand /><button className="text-button" onClick={onSignOut}>{registration ? 'Volver' : 'Salir de mi cuenta'}</button></header>
+    <header className="onboarding-header"><Brand /><div className="onboarding-header-actions"><button className="icon-btn" onClick={openAppearance} aria-label="Ajustes de accesibilidad" title="Ajustes de accesibilidad"><Accessibility size={17} /></button><button className="text-button" onClick={onSignOut}>{registration ? 'Volver' : 'Salir de mi cuenta'}</button></div></header>
     <div className="onboarding-shell"><section className="onboarding-card" aria-labelledby="onboarding-title">
       <div className="onboarding-topline"><span className="onboarding-kicker"><Sparkles size={14} /> TU ESPACIO, A TU MEDIDA</span><span className="step-counter">0{step} <i>/ 0{totalSteps}</i></span></div>
       <div className="step-progress" aria-label={`Paso ${step} de ${totalSteps}`}>{Array.from({ length: totalSteps }, (_, index) => index + 1).map((number) => <i className={number <= step ? 'done' : ''} key={number} />)}</div>
@@ -345,8 +375,22 @@ function MetricCard({ title, value, caption, icon: Icon, variant, trend }: { tit
   return <article className="metric-card"><div className={`metric-icon ${variant}`}><Icon size={19} /></div><span className="metric-title">{title}</span><b className="metric-value">{value}</b><span className="metric-caption">{caption}</span><span className="metric-trend"><i />{trend}</span></article>
 }
 
-function VerificationPending({ email, onBack, onSignIn }: { email: string; onBack: () => void; onSignIn: () => void }) {
-  return <main className="onboarding-page"><header className="onboarding-header"><Brand /><button className="text-button" onClick={onBack}>Volver al inicio</button></header><div className="onboarding-shell"><section className="onboarding-card verification-card"><div className="onboarding-title"><span className="onboarding-icon"><Check size={20} /></span><h1>Tu negocio ya tiene contexto</h1><p>Te enviamos un enlace de verificación a <b>{email}</b>. Ábrelo para activar tu cuenta y entrar a FinanzIA.</p></div><div className="verification-note"><LockKeyhole size={16} /><span>La verificación es el último paso. Tus respuestas se guardaron de forma segura y estarán listas cuando vuelvas.</span></div><button className="button button-primary signin-submit" onClick={onSignIn}>Ya verifiqué mi correo <ArrowRight size={16} /></button><button className="text-button verification-back" onClick={onBack}>Revisar el correo o empezar de nuevo</button></section></div></main>
+function AppearanceSettings({ value, onChange, onClose }: { value: Appearance; onChange: (value: Appearance) => void; onClose: () => void }) {
+  useEffect(() => {
+    function closeOnEscape(event: KeyboardEvent) { if (event.key === 'Escape') onClose() }
+    window.addEventListener('keydown', closeOnEscape)
+    return () => window.removeEventListener('keydown', closeOnEscape)
+  }, [onClose])
+  return <div className="modal-backdrop appearance-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}><section className="modal-card appearance-card" role="dialog" aria-modal="true" aria-labelledby="appearance-title"><div className="modal-head"><div><span className="modal-kicker"><SlidersHorizontal size={13} /> TU PANTALLA, A TU MANERA</span><h2 id="appearance-title">Accesibilidad y apariencia</h2></div><button className="icon-btn" onClick={onClose} aria-label="Cerrar ajustes"><X size={18} /></button></div>
+    <fieldset className="appearance-group"><legend>Tema</legend><p>Adapta FinanzIA a la luz de tu pantalla o elige uno.</p><div className="appearance-options">{([['system', 'Seguir dispositivo'], ['light', 'Claro'], ['dark', 'Oscuro']] as const).map(([theme, label]) => <button type="button" key={theme} className={value.theme === theme ? 'selected' : ''} aria-pressed={value.theme === theme} onClick={() => onChange({ ...value, theme })}>{label}</button>)}</div></fieldset>
+    <label className="appearance-group appearance-scale">Tamaño del texto y controles<select value={value.textScale} onChange={(event) => onChange({ ...value, textScale: Number(event.target.value) as Appearance['textScale'] })}><option value={1}>Normal</option><option value={1.12}>Grande</option><option value={1.25}>Muy grande</option></select><small>Aumenta la lectura y el tamaño de los elementos en toda la app.</small></label>
+    <label className="appearance-switch"><span><b>Escala de grises</b><small>Reduce los colores de toda la interfaz.</small></span><input type="checkbox" checked={value.grayscale} onChange={(event) => onChange({ ...value, grayscale: event.target.checked })} /></label>
+    <div className="appearance-footer"><button className="text-button" onClick={() => onChange({ theme: 'system', textScale: 1, grayscale: false })}>Restablecer preferencias</button><button className="button button-primary" onClick={onClose}>Listo <Check size={15} /></button></div>
+  </section></div>
+}
+
+function VerificationPending({ email, onBack, onSignIn, openAppearance }: { email: string; onBack: () => void; onSignIn: () => void; openAppearance: () => void }) {
+  return <main className="onboarding-page"><header className="onboarding-header"><Brand /><div className="onboarding-header-actions"><button className="icon-btn" onClick={openAppearance} aria-label="Ajustes de accesibilidad" title="Ajustes de accesibilidad"><Accessibility size={17} /></button><button className="text-button" onClick={onBack}>Volver al inicio</button></div></header><div className="onboarding-shell"><section className="onboarding-card verification-card"><div className="onboarding-title"><span className="onboarding-icon"><Check size={20} /></span><h1>Tu negocio ya tiene contexto</h1><p>Te enviamos un enlace de verificación a <b>{email}</b>. Ábrelo para activar tu cuenta y entrar a FinanzIA.</p></div><div className="verification-note"><LockKeyhole size={16} /><span>La verificación es el último paso. Tus respuestas se guardaron de forma segura y estarán listas cuando vuelvas.</span></div><button className="button button-primary signin-submit" onClick={onSignIn}>Ya verifiqué mi correo <ArrowRight size={16} /></button><button className="text-button verification-back" onClick={onBack}>Revisar el correo o empezar de nuevo</button></section></div></main>
 }
 
 function MovementTable({ movements }: { movements: Movement[] }) {
