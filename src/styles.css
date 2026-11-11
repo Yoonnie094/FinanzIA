@@ -232,4 +232,65 @@
 .signin-register{display:flex;align-items:center;justify-content:center;gap:4px;flex-wrap:wrap;margin-top:16px}
 .signin-register .text-button{font-size:inherit;font-weight:700}
 :root[data-theme="dark"] .verification-note{border-color:var(--line);background:var(--surface-soft)}
+.onboarding-header .text-button{font-size:14px}
+.onboarding-shell{width:min(820px,100%);margin:24px auto 0}
+.onboarding-card{padding:34px 42px 22px;border-radius:20px}
+.onboarding-form{grid-template-columns:repeat(2,minmax(0,1fr));gap:18px 20px}
+.onboarding-title,.onboarding-form>.onboarding-row,.onboarding-form>.choice-fieldset,.onboarding-form>.ai-consent,.onboarding-form>.onboarding-footer,.onboarding-form>.onboarding-error{grid-column:1/-1}
+.onboarding-title{padding:20px 0 4px}
+.onboarding-icon{width:48px;height:48px;border-radius:14px}
+.onboarding-kicker{font-size:12px;letter-spacing:1.2px}
+.onboarding-title h1{font-size:28px;letter-spacing:-.75px}
+.onboarding-title p{font-size:15px;line-height:1.6}
+.onboarding-form label{gap:8px;font-size:14px;line-height:1.4}
+.onboarding-form label>span{font-size:12px}
+.onboarding-form input:not([type="radio"]):not([type="checkbox"]),.onboarding-form select,.onboarding-form textarea{min-height:50px;padding:12px 14px;border-radius:10px;font-size:15px}
+.onboarding-form textarea{min-height:95px;line-height:1.55}
+.onboarding-row{gap:16px}
+.choice-fieldset legend{margin-bottom:10px;font-size:14px}
+.choice-cards{gap:12px}
+.onboarding-form label.choice-card{min-height:64px;padding:12px 14px}
+.choice-card b{font-size:14px}.choice-card small{font-size:12px}
+.ai-consent{grid-template-columns:20px 1fr;gap:12px!important;padding:15px}
+.ai-consent input{width:18px;height:18px}
+.ai-consent b{font-size:13px;line-height:1.5}.ai-consent small{font-size:12px;line-height:1.55}
+.onboarding-footer{gap:12px;padding-top:16px}
+.onboarding-footer>span{font-size:12px}
+.onboarding-footer .button{min-height:48px;padding:11px 18px;font-size:14px}
+.back-step{min-height:44px;font-size:14px}
+.onboarding-secure{font-size:12px}
+.onboarding-error{font-size:13px;line-height:1.5}
+@media(max-width:700px){
+  .onboarding-header{height:68px}
+  .onboarding-header .text-button{font-size:12px}
+  .onboarding-shell{width:min(100%,570px);margin-top:12px}
+  .onboarding-card{padding:24px 22px 18px;border-radius:16px}
+  .onboarding-form{grid-template-columns:minmax(0,1fr);gap:16px}
+  .onboarding-title,.onboarding-form>.onboarding-row,.onboarding-form>.choice-fieldset,.onboarding-form>.ai-consent,.onboarding-form>.onboarding-footer,.onboarding-form>.onboarding-error{grid-column:1}
+  .onboarding-title h1{font-size:24px}
+  .onboarding-title p{font-size:14px}
+  .onboarding-form label{font-size:14px}
+  .onboarding-form input:not([type="radio"]):not([type="checkbox"]),.onboarding-form select,.onboarding-form textarea{font-size:16px}
+  .onboarding-form label>span{font-size:12px}
+  .onboarding-row{grid-template-columns:minmax(0,1fr);gap:14px}
+  .onboarding-footer{flex-wrap:wrap}
+  .onboarding-footer>span{font-size:11px}
+  .onboarding-footer .button{font-size:13px}
+}
+@media(max-width:390px){.onboarding-page{padding-inline:10px}.onboarding-card{padding-inline:16px}.onboarding-kicker{font-size:10px}.step-counter{font-size:11px}.onboarding-footer .button{padding-inline:12px}}
+.signin-card{width:min(520px,100%);max-height:calc(100dvh - 36px);overflow:auto;padding:32px;border-radius:20px}
+.signin-card .modal-head{margin-bottom:24px}
+.signin-card .modal-kicker{font-size:12px;letter-spacing:1px}
+.signin-card .modal-head h2{font-size:28px;line-height:1.2;letter-spacing:-.7px}
+.signin-card form{gap:19px}
+.signin-card .signin-copy{margin:-8px 0 2px;font-size:15px;line-height:1.6}
+.signin-card label{gap:8px;font-size:14px;line-height:1.4}
+.signin-card input{min-height:50px;padding:12px 14px;border-radius:10px;font-size:16px}
+.signin-card .signin-submit{min-height:50px;margin-top:2px;font-size:15px}
+.signin-card .modal-note{gap:10px;padding:13px;border-radius:10px;font-size:13px;line-height:1.55}
+.signin-card .signin-register{margin-top:8px;font-size:14px}
+.signin-card .signin-register .text-button{font-size:14px}
+.signin-card .setup-state h3{font-size:20px}
+.signin-card .setup-state p{max-width:400px;font-size:15px;line-height:1.6}
+@media(max-width:620px){.modal-backdrop{padding:12px}.signin-card{width:100%;max-height:calc(100dvh - 24px);padding:24px 20px;border-radius:18px}.signin-card .modal-head h2{font-size:25px}.signin-card .signin-copy{font-size:14px}.signin-card .signin-register{align-items:flex-start;font-size:13px}.signin-card .signin-register .text-button{font-size:13px;text-align:left}}
 @media(max-width:620px){.onboarding-page{padding:0 12px 24px}.onboarding-header{height:62px}.onboarding-shell{margin-top:10px}.onboarding-card{padding:20px 17px 15px;border-radius:14px}.onboarding-title{padding-top:15px}.onboarding-title h1{font-size:18px}.onboarding-row{grid-template-columns:1fr;gap:12px}.onboarding-form{gap:12px}.choice-cards{gap:6px}.onboarding-footer>span{font-size:7px}.onboarding-footer .button{padding:9px 10px;font-size:8px}.onboarding-footer .button svg{width:13px}.onboarding-email{font-size:7px}}
