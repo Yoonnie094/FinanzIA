@@ -7,11 +7,18 @@ import { supabase, supabaseConfigured } from './lib/supabase'
 import { hasCompletedOnboarding, saveOnboarding, type OnboardingData } from './lib/onboarding'
 
 type WorkspaceView = 'dashboard' | 'movements' | 'payments'
-type View = 'landing' | 'onboarding' | WorkspaceView
+type View = 'landing' | 'registration' | 'verification-pending' | 'onboarding' | WorkspaceView
 type Modal = 'movement' | 'signin' | null
-type AccessMode = 'register' | 'login'
+type RegistrationData = OnboardingData & { email: string; password: string }
 
 const AUTH_CALLBACK_PATH = '/auth/callback'
+const requiredOnboardingFields: (keyof OnboardingData)[] = ['firstName', 'businessName', 'category', 'stage', 'teamSize', 'trackingMethod', 'hasInventory', 'mainChallenge', 'mainGoal', 'preferredEntry']
+
+function isOnboardingData(value: unknown): value is OnboardingData {
+  if (!value || typeof value !== 'object') return false
+  const data = value as Record<string, unknown>
+  return requiredOnboardingFields.every((key) => typeof data[key] === 'string' && data[key] !== '')
+}
 
 const clp = new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 })
 const shortDate = (date: string) => new Intl.DateTimeFormat('es-CL', { day: 'numeric', month: 'short' }).format(new Date(`${date}T12:00:00`))
@@ -24,10 +31,10 @@ function Brand({ inverse = false }: { inverse?: boolean }) {
 function App() {
   const [view, setView] = useState<View>('landing')
   const [modal, setModal] = useState<Modal>(null)
-  const [accessMode, setAccessMode] = useState<AccessMode>('register')
   const [movements, setMovements] = useState<Movement[]>(initialMovements)
   const [dark, setDark] = useState(localStorage.getItem('finanzia.theme') === 'dark')
   const [userEmail, setUserEmail] = useState<string | null>(null)
+  const [pendingEmail, setPendingEmail] = useState('')
   const [authUserId, setAuthUserId] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState('')
@@ -42,7 +49,6 @@ function App() {
     if (authError || authErrorCode) {
       window.history.replaceState({}, '', '/')
       setView('landing')
-      setAccessMode('login')
       setModal('signin')
       setNotice(authErrorCode === 'otp_expired'
         ? 'Este enlace venció o ya fue usado. Inicia sesión para pedir uno nuevo.'
@@ -63,14 +69,25 @@ function App() {
     return () => listener.subscription.unsubscribe()
   }, [])
   useEffect(() => {
-    if (!authUserId) return
+    if (!authUserId || !supabase) return
     let active = true
-    hasCompletedOnboarding(authUserId).then((complete) => {
+    const userId = authUserId
+    async function routeAuthenticatedUser() {
+      let complete = await hasCompletedOnboarding(userId)
+      if (!complete) {
+        const { data: { user } } = await supabase!.auth.getUser()
+        const pendingAnswers = user?.user_metadata?.finanzia_onboarding
+        if (user?.email && isOnboardingData(pendingAnswers)) {
+          await saveOnboarding(user.id, user.email, pendingAnswers)
+          complete = true
+        }
+      }
       if (!active) return
-      setView((current) => current === 'landing' || current === 'onboarding' ? complete ? 'dashboard' : 'onboarding' : current)
-    }).catch((error: Error) => { if (active) setNotice(error.message || 'No pudimos revisar tu perfil.') })
+      setView((current) => ['landing', 'registration', 'verification-pending', 'onboarding'].includes(current) ? complete ? 'dashboard' : 'onboarding' : current)
+    }
+    routeAuthenticatedUser().catch((error: Error) => { if (active) setNotice(error.message || 'No pudimos revisar tu perfil.') })
     return () => { active = false }
-  }, [authUserId])
+  }, [authUserId, userEmail])
   useEffect(() => {
     if (view !== 'dashboard' && view !== 'movements' && view !== 'payments') return
     let active = true
@@ -100,13 +117,45 @@ function App() {
   async function signIn(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!supabase) return
-    const email = String(new FormData(event.currentTarget).get('email'))
+    const form = new FormData(event.currentTarget)
+    const email = String(form.get('email'))
+    const password = String(form.get('password'))
     setBusy(true)
-    const callbackUrl = new URL(AUTH_CALLBACK_PATH, window.location.origin).toString()
-    const { error } = await supabase.auth.signInWithOtp({ email, options: { shouldCreateUser: accessMode === 'register', emailRedirectTo: callbackUrl } })
+    const { error } = await supabase.auth.signInWithPassword({ email, password })
     setBusy(false)
-    if (error) setNotice(error.message)
-    else { setModal(null); setNotice(accessMode === 'register' ? 'Te enviamos el enlace para crear tu cuenta.' : 'Te enviamos el enlace para entrar a tu cuenta.') }
+    if (error) setNotice('No pudimos iniciar sesión. Revisa tu correo y contraseña.')
+    else { setModal(null); setNotice('¡Qué bueno tenerte de vuelta!') }
+  }
+
+  async function registerUser(data: RegistrationData) {
+    if (!supabase) throw new Error('Conecta Supabase para crear una cuenta.')
+    const { email, password } = data
+    const answers: OnboardingData = {
+      firstName: data.firstName, lastName: data.lastName || '', businessName: data.businessName,
+      category: data.category, stage: data.stage, region: data.region || '', comuna: data.comuna || '',
+      description: data.description || '', teamSize: data.teamSize, trackingMethod: data.trackingMethod,
+      hasInventory: data.hasInventory, mainChallenge: data.mainChallenge, mainGoal: data.mainGoal,
+      preferredEntry: data.preferredEntry,
+    }
+    const callbackUrl = new URL(AUTH_CALLBACK_PATH, window.location.origin).toString()
+    setBusy(true)
+    try {
+      const { data: result, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: { emailRedirectTo: callbackUrl, data: { finanzia_onboarding: answers } },
+      })
+      if (error) throw error
+      if (result.user?.identities?.length === 0) throw new Error('Ya existe una cuenta con ese correo. Inicia sesión para continuar.')
+      if (result.session && result.user) {
+        setUserEmail(email)
+        setAuthUserId(result.user.id)
+        setView('onboarding')
+      } else {
+        setPendingEmail(email)
+        setView('verification-pending')
+      }
+    } finally { setBusy(false) }
   }
 
   async function finishOnboarding(answers: OnboardingData) {
@@ -126,16 +175,18 @@ function App() {
     else { setNotice('Sesión cerrada'); setMovements(initialMovements); setView('landing') }
   }
 
-  function openAccess(mode: AccessMode) { setAccessMode(mode); setModal('signin') }
+  function openAccess() { setModal('signin') }
 
   function navigate(next: View) { setView(next); setMobileMenu(false); window.scrollTo({ top: 0, behavior: 'smooth' }) }
 
   return <>
-    {view === 'landing' ? <Landing dark={dark} toggleTheme={() => setDark(!dark)} openDemo={() => navigate('dashboard')} openSignIn={() => openAccess('login')} openRegister={() => openAccess('register')} /> :
-      view === 'onboarding' ? <Onboarding userEmail={userEmail || ''} onComplete={finishOnboarding} busy={busy} onSignOut={signOut} /> :
-      <Workspace view={view} navigate={navigate} movements={movements} openMovement={() => setModal('movement')} dark={dark} toggleTheme={() => setDark(!dark)} userEmail={userEmail} openSignIn={() => openAccess('register')} signOut={signOut} mobileMenu={mobileMenu} setMobileMenu={setMobileMenu} />}
+    {view === 'landing' ? <Landing dark={dark} toggleTheme={() => setDark(!dark)} openDemo={() => navigate('dashboard')} openSignIn={openAccess} openRegister={() => navigate('registration')} /> :
+      view === 'registration' ? <Onboarding registration configured={supabaseConfigured} onRegister={registerUser} busy={busy} onSignOut={() => navigate('landing')} /> :
+      view === 'verification-pending' ? <VerificationPending email={pendingEmail} onBack={() => navigate('landing')} onSignIn={() => { setView('landing'); openAccess() }} /> :
+      view === 'onboarding' ? <Onboarding userEmail={userEmail || ''} onComplete={finishOnboarding} busy={busy} onSignOut={signOut} configured={supabaseConfigured} /> :
+      <Workspace view={view} navigate={navigate} movements={movements} openMovement={() => setModal('movement')} dark={dark} toggleTheme={() => setDark(!dark)} userEmail={userEmail} openSignIn={openAccess} signOut={signOut} mobileMenu={mobileMenu} setMobileMenu={setMobileMenu} />}
     {modal === 'movement' && <MovementModal onClose={() => setModal(null)} onSubmit={addMovement} busy={busy} />}
-    {modal === 'signin' && <SignInModal mode={accessMode} setMode={setAccessMode} onClose={() => setModal(null)} onSubmit={signIn} busy={busy} configured={supabaseConfigured} />}
+    {modal === 'signin' && <SignInModal onClose={() => setModal(null)} onSubmit={signIn} onRegister={() => navigate('registration')} busy={busy} configured={supabaseConfigured} />}
     {notice && <div className="toast"><Check size={16} />{notice}<button onClick={() => setNotice('')} aria-label="Cerrar aviso"><X size={14} /></button></div>}
   </>
 }
@@ -211,10 +262,11 @@ function Workspace({ view, navigate, movements, openMovement, dark, toggleTheme,
 
 const regionsOfChile = ['Arica y Parinacota', 'Tarapacá', 'Antofagasta', 'Atacama', 'Coquimbo', 'Valparaíso', 'Metropolitana de Santiago', "Libertador General Bernardo O’Higgins", 'Maule', 'Ñuble', 'Biobío', 'La Araucanía', 'Los Ríos', 'Los Lagos', 'Aysén', 'Magallanes y la Antártica Chilena']
 
-function Onboarding({ userEmail, onComplete, busy, onSignOut }: { userEmail: string; onComplete: (answers: OnboardingData) => Promise<void>; busy: boolean; onSignOut: () => void }) {
+function Onboarding({ userEmail = '', onComplete, onRegister, busy, onSignOut, registration = false, configured = true }: { userEmail?: string; onComplete?: (answers: OnboardingData) => Promise<void>; onRegister?: (data: RegistrationData) => Promise<void>; busy: boolean; onSignOut: () => void; registration?: boolean; configured?: boolean }) {
   const [step, setStep] = useState(1)
   const [answers, setAnswers] = useState<Partial<OnboardingData>>({})
   const [error, setError] = useState('')
+  const totalSteps = registration ? 4 : 3
 
   function readForm(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -233,15 +285,26 @@ function Onboarding({ userEmail, onComplete, busy, onSignOut }: { userEmail: str
     const completed = { ...answers, ...values } as OnboardingData
     setAnswers(completed)
     setError('')
-    try { await onComplete(completed) }
+    try { await onComplete?.(completed) }
     catch (submitError) { setError(submitError instanceof Error ? submitError.message : 'No pudimos guardar tu perfil. Inténtalo nuevamente.') }
   }
 
+  async function finishRegistration(event: FormEvent<HTMLFormElement>) {
+    const values = readForm(event)
+    if (values.password !== values.confirmPassword) { setError('Las contraseñas no coinciden. Revísalas para continuar.'); return }
+    const { confirmPassword: _confirmPassword, ...credentials } = values
+    const completed = { ...answers, ...credentials } as RegistrationData
+    setAnswers(completed)
+    setError('')
+    try { await onRegister?.(completed) }
+    catch (submitError) { setError(submitError instanceof Error ? submitError.message : 'No pudimos crear tu cuenta. Inténtalo nuevamente.') }
+  }
+
   return <main className="onboarding-page">
-    <header className="onboarding-header"><Brand /><button className="text-button" onClick={onSignOut}>Salir de mi cuenta</button></header>
+    <header className="onboarding-header"><Brand /><button className="text-button" onClick={onSignOut}>{registration ? 'Volver' : 'Salir de mi cuenta'}</button></header>
     <div className="onboarding-shell"><section className="onboarding-card" aria-labelledby="onboarding-title">
-      <div className="onboarding-topline"><span className="onboarding-kicker"><Sparkles size={14} /> TU ESPACIO, A TU MEDIDA</span><span className="step-counter">0{step} <i>/ 03</i></span></div>
-      <div className="step-progress" aria-label={`Paso ${step} de 3`}>{[1, 2, 3].map((number) => <i className={number <= step ? 'done' : ''} key={number} />)}</div>
+      <div className="onboarding-topline"><span className="onboarding-kicker"><Sparkles size={14} /> TU ESPACIO, A TU MEDIDA</span><span className="step-counter">0{step} <i>/ 0{totalSteps}</i></span></div>
+      <div className="step-progress" aria-label={`Paso ${step} de ${totalSteps}`}>{Array.from({ length: totalSteps }, (_, index) => index + 1).map((number) => <i className={number <= step ? 'done' : ''} key={number} />)}</div>
       {step === 1 && <form className="onboarding-form" onSubmit={nextStep}>
         <div className="onboarding-title"><span className="onboarding-icon"><Store size={20} /></span><h1 id="onboarding-title">Partamos por conocerte</h1><p>Con unos datos básicos adaptaremos FinanzIA a tu negocio.</p></div>
         <label>¿Cómo te llamas?<input name="firstName" required maxLength={60} defaultValue={answers.firstName} placeholder="Tu nombre" autoComplete="given-name" /></label>
@@ -257,21 +320,33 @@ function Onboarding({ userEmail, onComplete, busy, onSignOut }: { userEmail: str
         <fieldset className="choice-fieldset"><legend>¿Necesitas controlar productos o insumos?</legend><div className="choice-cards"><label className={answers.hasInventory === 'yes' ? 'choice-card selected' : 'choice-card'}><input type="radio" name="hasInventory" value="yes" required defaultChecked={answers.hasInventory === 'yes'} /><span><b>Sí</b><small>Productos o materiales</small></span></label><label className={answers.hasInventory === 'no' ? 'choice-card selected' : 'choice-card'}><input type="radio" name="hasInventory" value="no" required defaultChecked={answers.hasInventory === 'no'} /><span><b>No</b><small>Solo servicios u otro</small></span></label></div></fieldset>
         <div className="onboarding-footer"><button className="back-step" type="button" onClick={() => setStep(1)}><ChevronLeft size={16} /> Atrás</button><span>2 de 3</span><button className="button button-primary" type="submit">Continuar <ArrowRight size={16} /></button></div>
       </form>}
-      {step === 3 && <form className="onboarding-form" onSubmit={finish}>
+      {step === 3 && <form className="onboarding-form" onSubmit={registration ? nextStep : finish}>
         <div className="onboarding-title"><span className="onboarding-icon"><Sparkles size={20} /></span><h1 id="onboarding-title">¿En qué te gustaría avanzar?</h1><p>Estas respuestas darán contexto a futuras ayudas de IA. Puedes cambiar tus preferencias después.</p></div>
         <label>¿Qué te cuesta más hoy?<select name="mainChallenge" required defaultValue={answers.mainChallenge || ''}><option value="" disabled>Elige lo más importante</option><option value="know_profit">Saber cuánto estoy ganando realmente</option><option value="recording">Mantener ingresos y gastos al día</option><option value="separation">Separar la plata personal y la del negocio</option><option value="payments">Prepararme para pagos y deudas</option><option value="inventory">Controlar productos, materiales o compras</option><option value="starting">Planificar antes de empezar</option><option value="other">Otra cosa</option></select></label>
         <div className="onboarding-row"><label>¿Qué te sería más útil?<select name="mainGoal" required defaultValue={answers.mainGoal || ''}><option value="" disabled>Elige una prioridad</option><option value="organize">Tener todo ordenado en un lugar</option><option value="profit">Entender ingresos, gastos y ganancia</option><option value="cash">Saber cuánto puedo usar o reservar</option><option value="payments">No olvidar pagos próximos</option><option value="accountant">Compartir información con mi contador</option><option value="start_plan">Armar un plan paso a paso</option></select></label><label>¿Cómo preferirías anotar un movimiento?<select name="preferredEntry" required defaultValue={answers.preferredEntry || ''}><option value="" disabled>Elige cómo te acomoda</option><option value="form">Un formulario o tabla</option><option value="chat">Escribirlo en un chat</option><option value="voice">Dictarlo con mi voz</option><option value="automatic">Que se registre automáticamente</option><option value="unsure">Todavía no estoy seguro/a</option></select></label></div>
         <label className="ai-consent"><input name="aiConsent" type="checkbox" required /><span><b>Autorizo que este contexto se use para personalizar futuras respuestas de IA.</b><small>Por ahora FinanzIA no enviará estas respuestas a un modelo de IA. No pedimos RUT, claves ni datos bancarios.</small></span></label>
         {error && <p className="onboarding-error" role="alert">{error}</p>}
-        <div className="onboarding-footer"><button className="back-step" type="button" onClick={() => setStep(2)}><ChevronLeft size={16} /> Atrás</button><span>3 de 3</span><button className="button button-primary" type="submit" disabled={busy}>{busy ? 'Guardando tu espacio…' : 'Crear mi espacio'} <ArrowRight size={16} /></button></div>
+        <div className="onboarding-footer"><button className="back-step" type="button" onClick={() => setStep(2)}><ChevronLeft size={16} /> Atrás</button><span>3 de 0{totalSteps}</span><button className="button button-primary" type="submit" disabled={busy}>{registration ? 'Continuar' : busy ? 'Guardando tu espacio…' : 'Guardar mi perfil'} <ArrowRight size={16} /></button></div>
+      </form>}
+      {registration && step === 4 && <form className="onboarding-form" onSubmit={finishRegistration}>
+        <div className="onboarding-title"><span className="onboarding-icon"><LockKeyhole size={20} /></span><h1 id="onboarding-title">Ya sabemos más de tu negocio</h1><p>Ahora crea tu acceso. Al terminar, enviaremos un enlace para verificar tu correo.</p></div>
+        <label>Correo electrónico<input name="email" type="email" required autoComplete="email" placeholder="tu@negocio.cl" /></label>
+        <div className="onboarding-row"><label>Contraseña<input name="password" type="password" required minLength={8} autoComplete="new-password" placeholder="Al menos 8 caracteres" /></label><label>Repite tu contraseña<input name="confirmPassword" type="password" required minLength={8} autoComplete="new-password" placeholder="Escríbela nuevamente" /></label></div>
+        {!configured && <p className="onboarding-error" role="alert">El acceso aún no está conectado. Tus respuestas no se enviarán hasta completar esta configuración.</p>}
+        {error && <p className="onboarding-error" role="alert">{error}</p>}
+        <div className="onboarding-footer"><button className="back-step" type="button" onClick={() => { setError(''); setStep(3) }}><ChevronLeft size={16} /> Atrás</button><span>4 de 04</span><button className="button button-primary" type="submit" disabled={busy || !configured}>{busy ? 'Creando tu cuenta…' : 'Crear cuenta y verificar correo'} <ArrowRight size={16} /></button></div>
       </form>}
       <div className="onboarding-secure"><LockKeyhole size={14} /><span>Tu perfil es privado y solo tú puedes acceder a él.</span></div>
-    </section><p className="onboarding-email">Vas a crear tu espacio con <b>{userEmail}</b></p></div>
+    </section>{!registration && <p className="onboarding-email">Vas a crear tu espacio con <b>{userEmail}</b></p>}</div>
   </main>
 }
 
 function MetricCard({ title, value, caption, icon: Icon, variant, trend }: { title: string; value: string; caption: string; icon: typeof Wallet; variant: string; trend: string }) {
   return <article className="metric-card"><div className={`metric-icon ${variant}`}><Icon size={19} /></div><span className="metric-title">{title}</span><b className="metric-value">{value}</b><span className="metric-caption">{caption}</span><span className="metric-trend"><i />{trend}</span></article>
+}
+
+function VerificationPending({ email, onBack, onSignIn }: { email: string; onBack: () => void; onSignIn: () => void }) {
+  return <main className="onboarding-page"><header className="onboarding-header"><Brand /><button className="text-button" onClick={onBack}>Volver al inicio</button></header><div className="onboarding-shell"><section className="onboarding-card verification-card"><div className="onboarding-title"><span className="onboarding-icon"><Check size={20} /></span><h1>Tu negocio ya tiene contexto</h1><p>Te enviamos un enlace de verificación a <b>{email}</b>. Ábrelo para activar tu cuenta y entrar a FinanzIA.</p></div><div className="verification-note"><LockKeyhole size={16} /><span>La verificación es el último paso. Tus respuestas se guardaron de forma segura y estarán listas cuando vuelvas.</span></div><button className="button button-primary signin-submit" onClick={onSignIn}>Ya verifiqué mi correo <ArrowRight size={16} /></button><button className="text-button verification-back" onClick={onBack}>Revisar el correo o empezar de nuevo</button></section></div></main>
 }
 
 function MovementTable({ movements }: { movements: Movement[] }) {
@@ -285,9 +360,8 @@ function MovementModal({ onClose, onSubmit, busy }: { onClose: () => void; onSub
   return <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}><section className="modal-card" role="dialog" aria-modal="true" aria-labelledby="movement-title"><div className="modal-head"><div><span className="modal-kicker">TU NEGOCIO, TUS CUENTAS</span><h2 id="movement-title">Anota un movimiento</h2></div><button className="icon-btn" onClick={onClose} aria-label="Cerrar"><X size={18} /></button></div><form onSubmit={onSubmit}><div className="type-toggle"><button type="button" className={type === 'income' ? 'selected income-selected' : ''} onClick={() => setType('income')}><ArrowDownLeft size={15} /> Ingreso</button><button type="button" className={type === 'expense' ? 'selected expense-selected' : ''} onClick={() => setType('expense')}><ArrowUpRight size={15} /> Gasto</button></div><input type="hidden" name="type" value={type} /><label>¿Qué fue?<input name="description" placeholder={type === 'income' ? 'Ej. Venta de productos' : 'Ej. Compra de materiales'} required maxLength={120} /></label><div className="form-row"><label>Monto en pesos<input name="amount" type="number" min="1" step="1" placeholder="0" required /></label><label>Fecha<input name="date" type="date" defaultValue={todayISO()} required /></label></div><label>Categoría<select key={type} name="category" defaultValue={categories[0]}>{categories.map((category) => <option key={category}>{category}</option>)}</select></label><div className="modal-note"><ShieldCheck size={16} /><span>Los montos se guardan en pesos chilenos. Revisa que los datos estén correctos antes de guardar.</span></div><div className="modal-actions"><button className="outline-button" type="button" onClick={onClose}>Cancelar</button><button className="button button-primary" type="submit" disabled={busy}>{busy ? 'Guardando…' : 'Guardar movimiento'} <ArrowRight size={15} /></button></div></form></section></div>
 }
 
-function SignInModal({ mode, setMode, onClose, onSubmit, busy, configured }: { mode: AccessMode; setMode: (mode: AccessMode) => void; onClose: () => void; onSubmit: (event: FormEvent<HTMLFormElement>) => void; busy: boolean; configured: boolean }) {
-  const register = mode === 'register'
-  return <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}><section className="modal-card signin-card" role="dialog" aria-modal="true" aria-labelledby="signin-title"><div className="modal-head"><div><span className="modal-kicker">{register ? 'TU NEGOCIO, TU ESPACIO' : 'QUÉ BUENO TENERTE DE VUELTA'}</span><h2 id="signin-title">{register ? 'Crea tu cuenta' : 'Entra a tu espacio'}</h2></div><button className="icon-btn" onClick={onClose} aria-label="Cerrar"><X size={18} /></button></div><div className="access-tabs"><button className={register ? 'active' : ''} onClick={() => setMode('register')}>Crear cuenta</button><button className={!register ? 'active' : ''} onClick={() => setMode('login')}>Iniciar sesión</button></div>{configured ? <form onSubmit={onSubmit}><p className="signin-copy">{register ? 'Comienza gratis. Te enviaremos un enlace seguro para confirmar tu correo y crear tu espacio.' : 'Te enviaremos un enlace seguro para entrar, sin necesidad de recordar una contraseña.'}</p><label>Correo electrónico<input name="email" type="email" placeholder="tu@negocio.cl" required /></label><button className="button button-primary signin-submit" disabled={busy}>{busy ? 'Enviando…' : register ? 'Continuar con mi correo' : 'Enviarme un enlace'} <ArrowRight size={15} /></button><div className="modal-note"><ShieldCheck size={16} /><span>Sin contraseña. Tus datos quedan protegidos en tu cuenta.</span></div></form> : <div className="setup-state"><span className="setup-icon"><ShieldCheck size={21} /></span><h3>Tu espacio se está preparando</h3><p>Cuando conectes tu proyecto de Supabase, podrás crear una cuenta y guardar tus movimientos de forma segura. Mientras tanto, puedes explorar el demo.</p><button className="button button-primary" onClick={onClose}>Entendido</button></div>}</section></div>
+function SignInModal({ onClose, onSubmit, onRegister, busy, configured }: { onClose: () => void; onSubmit: (event: FormEvent<HTMLFormElement>) => void; onRegister: () => void; busy: boolean; configured: boolean }) {
+  return <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}><section className="modal-card signin-card" role="dialog" aria-modal="true" aria-labelledby="signin-title"><div className="modal-head"><div><span className="modal-kicker">QUÉ BUENO TENERTE DE VUELTA</span><h2 id="signin-title">Entra a tu espacio</h2></div><button className="icon-btn" onClick={onClose} aria-label="Cerrar"><X size={18} /></button></div>{configured ? <form onSubmit={onSubmit}><p className="signin-copy">Ingresa con el correo y la contraseña que elegiste al crear tu cuenta.</p><label>Correo electrónico<input name="email" type="email" placeholder="tu@negocio.cl" autoComplete="email" required /></label><label>Contraseña<input name="password" type="password" autoComplete="current-password" required /></label><button className="button button-primary signin-submit" disabled={busy}>{busy ? 'Ingresando…' : 'Iniciar sesión'} <ArrowRight size={15} /></button><div className="modal-note"><ShieldCheck size={16} /><span>Tu negocio y su contexto quedan guardados en tu cuenta.</span></div><p className="signin-copy signin-register">¿Primera vez? <button type="button" className="text-button" onClick={() => { onClose(); onRegister() }}>Cuéntanos de tu negocio y crea tu cuenta</button></p></form> : <div className="setup-state"><span className="setup-icon"><ShieldCheck size={21} /></span><h3>Tu espacio se está preparando</h3><p>Cuando conectes tu proyecto de Supabase, podrás iniciar sesión y guardar tus movimientos de forma segura. Mientras tanto, puedes explorar el demo.</p><button className="button button-primary" onClick={onClose}>Entendido</button></div>}</section></div>
 }
 
 function exportCSV(movements: Movement[]) {
