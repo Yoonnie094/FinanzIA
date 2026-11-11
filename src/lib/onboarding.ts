@@ -1,5 +1,7 @@
 import { supabase } from './supabase'
 
+export const FINANZIA_TERMS_VERSION = '1.2'
+
 export type OnboardingData = {
   firstName: string
   lastName: string
@@ -13,8 +15,10 @@ export type OnboardingData = {
   trackingMethod: string
   hasInventory: string
   mainChallenge: string
+  mainChallengeDetail?: string
   mainGoal: string
   preferredEntry: string
+  termsAcceptedAt?: string
 }
 
 export async function hasCompletedOnboarding(userId: string): Promise<boolean> {
@@ -26,7 +30,7 @@ export async function hasCompletedOnboarding(userId: string): Promise<boolean> {
     .limit(1)
     .maybeSingle()
   if (error) throw error
-  return data?.ai_context?.onboarding_version === 1 && data?.ai_context?.ai_context_consent === true
+  return data?.ai_context?.onboarding_version === 1 && Boolean(data?.ai_context?.terms_accepted_at)
 }
 
 export async function saveOnboarding(userId: string, email: string, answers: OnboardingData): Promise<void> {
@@ -48,10 +52,11 @@ export async function saveOnboarding(userId: string, email: string, answers: Onb
     tracking_method: answers.trackingMethod,
     has_inventory: answers.hasInventory === 'yes',
     main_challenge: answers.mainChallenge,
+    main_challenge_detail: answers.mainChallenge === 'other' ? answers.mainChallengeDetail?.trim() || null : null,
     main_goal: answers.mainGoal,
     preferred_entry: answers.preferredEntry,
-    ai_context_consent: true,
-    ai_context_consented_at: new Date().toISOString(),
+    terms_version: FINANZIA_TERMS_VERSION,
+    terms_accepted_at: answers.termsAcceptedAt || null,
     locale: 'es-CL',
     country: 'Chile',
     currency: 'CLP',

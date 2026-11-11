@@ -4,10 +4,10 @@ import { ArrowDownLeft, ArrowLeft, ArrowRight, ArrowUpRight, BarChart3, Bell, Ch
 import { incomeCategories, expenseCategories, initialMovements, type Movement, type MovementType } from './types'
 import { loadMovements, saveMovement } from './lib/movements'
 import { supabase, supabaseConfigured } from './lib/supabase'
-import { hasCompletedOnboarding, saveOnboarding, type OnboardingData } from './lib/onboarding'
+import { FINANZIA_TERMS_VERSION, hasCompletedOnboarding, saveOnboarding, type OnboardingData } from './lib/onboarding'
 
 type WorkspaceView = 'dashboard' | 'movements' | 'payments'
-type View = 'landing' | 'registration' | 'verification-pending' | 'onboarding' | WorkspaceView
+type View = 'landing' | 'registration' | 'verification-pending' | 'onboarding' | 'terms' | WorkspaceView
 type Modal = 'movement' | 'signin' | null
 type RegistrationData = OnboardingData & { email: string; password: string }
 type ThemeChoice = 'system' | 'light' | 'dark'
@@ -39,8 +39,51 @@ function Brand({ inverse = false }: { inverse?: boolean }) {
   return <span className={`brand ${inverse ? 'brand-inverse' : ''}`}><span className="brand-mark"><span /><span /><span /></span><span>FinanzIA</span></span>
 }
 
+function TermsPage() {
+  useEffect(() => {
+    const previousTitle = document.title
+    document.title = 'Términos de uso y privacidad — FinanzIA'
+    return () => { document.title = previousTitle }
+  }, [])
+
+  return <main className="legal-page">
+    <header className="legal-header"><a href="/" aria-label="FinanzIA, volver al inicio"><Brand /></a><a className="legal-home" href="/">Volver a FinanzIA <ArrowRight size={15} /></a></header>
+    <article className="legal-document">
+      <div className="eyebrow"><ShieldCheck size={14} /> INFORMACIÓN LEGAL DE FINANZIA</div>
+      <p className="legal-version">Versión 1.2 · Actualizada el 11 de noviembre de 2026</p>
+      <h1>Términos de uso<br /><span>y política de privacidad</span></h1>
+      <p className="legal-intro">Estas condiciones explican cómo usar FinanzIA y cómo se tratan los datos personales que entregas al crear tu cuenta y usar el servicio. Léelas antes de registrarte.</p>
+
+      <aside className="legal-notice"><b>Estado actual de FinanzIA</b><p>Este MVP usa Supabase para autenticación y base de datos. La conexión a un proveedor de inteligencia artificial todavía no está activa: actualmente no enviamos tu perfil ni tus movimientos a un modelo de IA. Si esta función se habilita, informaremos antes qué proveedor, datos y finalidades se usarán y pediremos la autorización que corresponda.</p></aside>
+
+      <section><h2>1. Quién presta el servicio y responde por los datos</h2><p>FinanzIA es un servicio en desarrollo para ayudar a pequeñas y medianas empresas a registrar y comprender información de su negocio.</p><dl className="legal-facts"><div><dt>Responsable del tratamiento</dt><dd>Javiera Angulo Barraza, creadora de FinanzIA.</dd></div><div><dt>Contacto para privacidad, consultas y solicitudes</dt><dd><a href="mailto:javiera.angulo2005@gmail.com">javiera.angulo2005@gmail.com</a></dd></div></dl><p>El correo anterior es el canal habilitado para solicitudes sobre datos personales. No se publica domicilio postal.</p></section>
+
+      <section><h2>2. Qué datos tratamos</h2><p>Según las funciones que uses, FinanzIA puede tratar:</p><ul><li><b>Cuenta:</b> correo electrónico, contraseña gestionada por Supabase Auth y datos necesarios para verificar el correo e iniciar sesión.</li><li><b>Perfil y contexto de la PYME:</b> nombre de la persona, nombre y rubro del negocio, etapa, tamaño del equipo, método de registro, si controla inventario, objetivos y desafíos indicados.</li><li><b>Ubicación y descripción:</b> región, comuna y descripción del negocio, que son opcionales cuando el formulario así lo indica.</li><li><b>Movimientos financieros ingresados:</b> tipo, descripción, categoría, monto en pesos chilenos y fecha.</li><li><b>Datos técnicos básicos:</b> sesión de cuenta y preferencias de visualización guardadas en el navegador. El alojamiento puede generar registros técnicos de conexión para operar y proteger el sitio.</li></ul><p>No solicites ni ingreses claves bancarias, números de tarjetas, RUT de terceros ni información sensible que no sea necesaria para llevar las cuentas de tu negocio.</p></section>
+
+      <section><h2>3. Para qué usamos la información</h2><p>Tratamos los datos para crear y proteger tu cuenta, verificar tu correo, guardar el perfil y los movimientos que ingresas, mostrar resúmenes del negocio, adaptar la experiencia a las respuestas del onboarding, mantener y proteger el servicio, y responder solicitudes de soporte o privacidad. No vendemos tus datos ni los usamos para publicidad personalizada.</p><p>Los campos marcados como opcionales pueden dejarse vacíos. Si no entregas datos necesarios para una función, esa función podría no estar disponible o no funcionar correctamente.</p></section>
+
+      <section><h2>4. Base y constancia del tratamiento</h2><p>En el registro se te solicita una autorización expresa para tratar los datos que entregas con el fin de crear y administrar tu cuenta, guardar el contexto de tu PYME y prestar las funciones que solicitas, junto con la aceptación de estos términos. La casilla no autoriza usos ajenos a esas finalidades. Conservamos la versión aceptada y la fecha y hora de aceptación como constancia electrónica. Puedes retirar tu autorización escribiendo al contacto indicado; esto no afecta la licitud del tratamiento previo y puede impedir funciones que dependan de esos datos.</p><p>Hasta el 30 de noviembre de 2026 rige el texto vigente de la Ley N.º 19.628. La Ley N.º 21.719, que modifica ese régimen, tiene entrada en vigor el 1 de diciembre de 2026. Esta política se redactó considerando ambas fechas y se actualizará si cambian las funciones, proveedores o finalidades.</p></section>
+
+      <section><h2>5. Proveedores y transferencias internacionales</h2><p><b>Supabase</b> presta la autenticación y base de datos conectadas al MVP; el proyecto está configurado en la región <b>us-west-2 (Estados Unidos)</b>. Esto implica que los datos alojados allí se procesan fuera de Chile. <b>Vercel</b> aloja la aplicación web y puede procesar datos técnicos de conexión; la región efectiva, los registros y sus plazos de retención deben confirmarse en la configuración de producción. Cada proveedor puede utilizar subencargados para operar su servicio, conforme a sus condiciones y políticas.</p><p>Antes de producción, la responsable debe revisar las condiciones vigentes de los proveedores, sus subencargados, mecanismos y garantías para transferencias internacionales, y completar la información de alojamiento y retención de Vercel. Esta política se actualizará con esos datos confirmados.</p></section>
+
+      <section><h2>6. Plazo de conservación</h2><p>Los datos se conservan mientras la cuenta esté activa y sean necesarios para prestar las funciones solicitadas. Puedes pedir el cierre de la cuenta y la eliminación de tus datos escribiendo al correo de privacidad. Se podrán conservar los antecedentes que deban mantenerse por obligación legal, para resolver controversias o proteger la seguridad del servicio. Las copias de respaldo se eliminarán o sobrescribirán conforme a sus ciclos técnicos de retención.</p><p>El MVP aún no tiene una opción automática de eliminación de cuenta; las solicitudes se gestionan por el canal de contacto indicado.</p></section>
+
+      <section><h2>7. Tus derechos y cómo ejercerlos</h2><p>Puedes escribir a <a href="mailto:javiera.angulo2005@gmail.com">javiera.angulo2005@gmail.com</a> para consultar si tratamos tus datos, conocer su origen y destinatarios, pedir actualización o corrección, solicitar eliminación cuando corresponda, retirar una autorización, o pedir bloqueo temporal conforme a la ley vigente.</p><p>Desde el 1 de diciembre de 2026, la Ley N.º 21.719 reconoce, entre otros, derechos de acceso, rectificación, supresión, oposición, portabilidad y bloqueo. Atenderemos las solicitudes según los requisitos y plazos legales aplicables. Si una solicitud es rechazada o no se responde oportunamente, podrás acudir a la autoridad competente de acuerdo con el procedimiento que establezca la ley.</p></section>
+
+      <section><h2>8. Seguridad y decisiones asistidas por IA</h2><p>FinanzIA usa autenticación de Supabase y controles de acceso de la aplicación. Antes de producción se deben corregir y verificar las alertas de seguridad detectadas en la configuración de base de datos, además de comprobar las políticas de acceso por usuario. Mantén tu contraseña protegida y cierra sesión en dispositivos compartidos.</p><p>Cuando la ayuda de IA esté disponible, sus clasificaciones y explicaciones serán orientativas y pueden equivocarse. Revisa los datos y conserva la decisión final. FinanzIA no reemplaza asesoría contable, tributaria, financiera ni legal.</p></section>
+
+      <section><h2>9. Uso del servicio</h2><p>Usa FinanzIA para gestionar la información de negocios que estás autorizado a administrar. No cargues datos de otras personas sin contar con la autorización o fundamento que corresponda. No intentes acceder a cuentas ajenas, interferir con el servicio ni usar la plataforma para actividades ilícitas.</p></section>
+
+      <section><h2>10. Cambios a estos términos</h2><p>Si cambia la ley, la forma de tratar datos o las funciones de FinanzIA, actualizaremos esta página e incrementaremos su versión. Cuando un cambio requiera una nueva autorización, te la pediremos antes de aplicar el nuevo tratamiento. Puedes volver a esta página desde el enlace mostrado durante el registro.</p></section>
+
+      <section className="legal-references"><h2>Normativa de referencia</h2><ul><li><a href="https://www.bcn.cl/leychile/navegar?idNorma=141599&idVersion=2023-05-09" target="_blank" rel="noopener noreferrer">Ley N.º 19.628, texto vigente hasta el 30 de noviembre de 2026</a></li><li><a href="https://www.bcn.cl/leychile/navegar?i=1209272" target="_blank" rel="noopener noreferrer">Ley N.º 21.719, con vigencia desde el 1 de diciembre de 2026</a></li></ul></section>
+      <footer className="legal-footer"><Brand /><a href="mailto:javiera.angulo2005@gmail.com">Contacto de privacidad</a><span>Versión 1.2 · 11/11/2026</span></footer>
+    </article>
+  </main>
+}
+
 function App() {
-  const [view, setView] = useState<View>('landing')
+  const [view, setView] = useState<View>(() => window.location.pathname === '/terminos-y-condiciones' ? 'terms' : 'landing')
   const [modal, setModal] = useState<Modal>(null)
   const [movements, setMovements] = useState<Movement[]>(initialMovements)
   const [appearance, setAppearance] = useState<Appearance>(getSavedAppearance)
@@ -164,7 +207,8 @@ const toggleTheme = () => setAppearance((current) => ({ ...current, theme: curre
       category: data.category, stage: data.stage, region: data.region || '', comuna: data.comuna || '',
       description: data.description || '', teamSize: data.teamSize, trackingMethod: data.trackingMethod,
       hasInventory: data.hasInventory, mainChallenge: data.mainChallenge, mainGoal: data.mainGoal,
-      preferredEntry: data.preferredEntry,
+      mainChallengeDetail: data.mainChallengeDetail || '',
+      preferredEntry: data.preferredEntry, termsAcceptedAt: data.termsAcceptedAt,
     }
     const callbackUrl = new URL(AUTH_CALLBACK_PATH, window.location.origin).toString()
     setBusy(true)
@@ -172,7 +216,7 @@ const toggleTheme = () => setAppearance((current) => ({ ...current, theme: curre
       const { data: result, error } = await supabase.auth.signUp({
         email,
         password,
-        options: { emailRedirectTo: callbackUrl, data: { finanzia_onboarding: answers } },
+        options: { emailRedirectTo: callbackUrl, data: { finanzia_onboarding: answers, finanzia_terms_version: FINANZIA_TERMS_VERSION, finanzia_terms_accepted_at: data.termsAcceptedAt || new Date().toISOString() } },
       })
       if (error) throw error
       if (result.user?.identities?.length === 0) throw new Error('Ya existe una cuenta con ese correo. Inicia sesión para continuar.')
@@ -209,7 +253,7 @@ const toggleTheme = () => setAppearance((current) => ({ ...current, theme: curre
   function navigate(next: View) { setView(next); setMobileMenu(false); window.scrollTo({ top: 0, behavior: 'smooth' }) }
 
   return <>
-    {view === 'landing' ? <Landing dark={dark} toggleTheme={toggleTheme} appearance={appearance} adjustTextScale={adjustTextScale} toggleGrayscale={toggleGrayscale} openSignIn={openAccess} openRegister={() => navigate('registration')} /> :
+    {view === 'terms' ? <TermsPage /> : view === 'landing' ? <Landing dark={dark} toggleTheme={toggleTheme} appearance={appearance} adjustTextScale={adjustTextScale} toggleGrayscale={toggleGrayscale} openSignIn={openAccess} openRegister={() => navigate('registration')} /> :
       view === 'registration' ? <Onboarding registration configured={supabaseConfigured} onRegister={registerUser} busy={busy} onSignOut={() => navigate('landing')} appearance={appearance} adjustTextScale={adjustTextScale} toggleGrayscale={toggleGrayscale} /> :
       view === 'verification-pending' ? <VerificationPending email={pendingEmail} onBack={() => navigate('landing')} onSignIn={() => { setView('landing'); openAccess() }} appearance={appearance} adjustTextScale={adjustTextScale} toggleGrayscale={toggleGrayscale} /> :
       view === 'onboarding' ? <Onboarding userEmail={userEmail || ''} onComplete={finishOnboarding} busy={busy} onSignOut={signOut} configured={supabaseConfigured} appearance={appearance} adjustTextScale={adjustTextScale} toggleGrayscale={toggleGrayscale} /> :
@@ -243,7 +287,7 @@ function Landing({ dark, toggleTheme, appearance, adjustTextScale, toggleGraysca
         <div className="hero-copy">
           <div className="eyebrow"><Sparkles size={14} /> TE PRESENTO FINANZIA · FINANZAS PARA PYMES</div>
           <h1>Tus cuentas,<br /><span>en claro.</span></h1>
-          <p>Clientes, compras, pagos: el día se llena y las cuentas quedan para después. FinanzIA reúne tus movimientos y, con apoyo de IA, te ayuda a entender tu caja y revisar lo que viene.</p>
+          <p>Clientes, compras, pagos: el día se llena y las cuentas quedan para después. FinanzIA reúne tus movimientos y prepara ayuda con IA para que puedas entender tu caja y revisar lo que viene.</p>
           <div className="hero-actions"><button className="button button-primary button-large" onClick={openRegister}>Ordenar mi pyme <ArrowRight size={17} /></button><a className="quiet-link" href="#como-funciona">Conoce el recorrido <ArrowDownLeft size={15} /></a></div>
           <div className="hero-proof"><span>Para quienes llevan un negocio<br />a pulso, todos los días</span><span className="proof-divider" /><span className="secure-proof"><ShieldCheck size={16} /> Tu negocio, a tu ritmo</span></div>
         </div>
@@ -258,7 +302,7 @@ function Landing({ dark, toggleTheme, appearance, adjustTextScale, toggleGraysca
       <section className="section how-section" id="como-funciona"><div className="wrap"><div className="section-heading"><div className="eyebrow">ASÍ TE ACOMPAÑO</div><h2>De lo que pasa en tu negocio<br />a lo que puedes hacer después.</h2><p>Un recorrido sencillo para que los números dejen de ser un montón de datos y empiecen a servirte en el día a día.</p></div>
         <div className="steps-grid"><article className="step-card"><span className="step-number">01</span><div className="step-icon lavender-icon"><ClipboardList size={22} /></div><h3>Registra tus movimientos</h3><p>Anota ventas, compras y pagos desde el teléfono o computador, y mantén la información de tu negocio en un solo lugar.</p><div className="step-visual concept-mini mini-register" role="img" aria-label="Ilustración de registro de una venta, una compra y un pago"><span className="mini-flow-item"><ArrowDownLeft size={15} /> Venta</span><span className="mini-flow-item"><ArrowUpRight size={15} /> Compra</span><span className="mini-flow-item"><CreditCard size={15} /> Pago</span></div></article>
           <article className="step-card"><span className="step-number">02</span><div className="step-icon peach-icon"><Eye size={22} /></div><h3>Entiende cómo va tu caja</h3><p>Revisa lo que ha entrado y salido, qué pagos se acercan y cómo se relacionan tus movimientos.</p><div className="step-visual concept-mini mini-summary" role="img" aria-label="Ilustración de ingresos y gastos que forman una vista general"><span>Ingresos</span><i /><span>Gastos</span><i /><b><Eye size={16} /> Vista clara del negocio</b></div></article>
-          <article className="step-card"><span className="step-number">03</span><div className="step-icon mint-icon"><Sparkles size={22} /></div><h3>Planifica el próximo paso</h3><p>Recibe explicaciones sencillas para mirar tus opciones y prepararte para los pagos que vienen.</p><div className="step-visual step-insight"><span className="insight-star"><Sparkles size={13} /></span><span><b>Explicaciones en simple</b><small>Ideas para mirar opciones y planificar.</small></span><ArrowRight size={15} /></div></article></div>
+          <article className="step-card"><span className="step-number">03</span><div className="step-icon mint-icon"><Sparkles size={22} /></div><h3>Apóyate en la IA</h3><p>Con tus movimientos como contexto, la IA podrá sugerir categorías, explicar cómo va tu caja y ayudarte a tener pagos próximos a la vista. Tú revisas y decides.</p><div className="step-visual ai-preview"><span className="ai-preview-label"><Sparkles size={13} /> PRUEBA PREGUNTAR</span><b>¿Qué pagos se acercan?</b><small>FinanzIA te responde usando la información de tu negocio.</small></div></article></div>
       </div></section>
       <section className="section audience-section" id="para-ti"><div className="wrap audience-wrap"><div className="audience-copy"><div className="eyebrow">HECHA PARA TU DÍA A DÍA</div><h2>No tienes que ser experto.<br /><span>Solo conocer tu negocio.</span></h2><p>Vendas productos, ofrezcas servicios o estés recién empezando, puedes partir con lo que ya sabes. FinanzIA te acompaña a ordenar tus cuentas paso a paso.</p><ul><li><span><Check size={14} /></span> Registra ventas, compras y pagos en un solo lugar</li><li><span><Check size={14} /></span> Distingue lo personal de lo que es de tu pyme</li><li><span><Check size={14} /></span> Revisa qué pagos se acercan y planifica</li></ul><button className="button button-primary" onClick={openRegister}>Empezar con mi pyme <ArrowRight size={16} /></button></div><div className="audience-card concept-route" role="img" aria-label="Ilustración conceptual de FinanzIA: registrar, entender y planificar"><span className="category-chip">TU NEGOCIO, PASO A PASO</span><div className="route-step"><span className="route-icon lavender-icon"><ClipboardList size={18} /></span><span><b>Registrar</b><small>Anotar lo que pasa</small></span><span className="route-number">01</span></div><div className="route-link" /><div className="route-step"><span className="route-icon peach-icon"><Eye size={18} /></span><span><b>Entender</b><small>Ver el panorama</small></span><span className="route-number">02</span></div><div className="route-link" /><div className="route-step"><span className="route-icon mint-icon"><Sparkles size={18} /></span><span><b>Planificar</b><small>Elegir el próximo paso</small></span><span className="route-number">03</span></div><div className="card-blob" /></div></div></section>
       <section className="closing-cta"><div className="wrap cta-inner"><div className="cta-flower">✳</div><div><div className="eyebrow">PARTAMOS POR TU NEGOCIO</div><h2>Tus cuentas más claras.<br /><span>Tú, con más espacio para crecer.</span></h2><p>Cuéntame de tu pyme. Armemos un espacio que te ayude a llevar sus finanzas a tu manera.</p></div><button className="button button-light button-large" onClick={openRegister}>Crear mi espacio <ArrowRight size={17} /></button><span className="cta-star">✦</span></div></section>
@@ -296,6 +340,8 @@ const regionsOfChile = ['Arica y Parinacota', 'Tarapacá', 'Antofagasta', 'Ataca
 function Onboarding({ userEmail = '', onComplete, onRegister, busy, onSignOut, appearance, adjustTextScale, toggleGrayscale, registration = false, configured = true }: { userEmail?: string; onComplete?: (answers: OnboardingData) => Promise<void>; onRegister?: (data: RegistrationData) => Promise<void>; busy: boolean; onSignOut: () => void; appearance: Appearance; adjustTextScale: (difference: number) => void; toggleGrayscale: () => void; registration?: boolean; configured?: boolean }) {
   const [step, setStep] = useState(1)
   const [answers, setAnswers] = useState<Partial<OnboardingData>>({})
+  const [mainChallenge, setMainChallenge] = useState('')
+  const [mainChallengeDetail, setMainChallengeDetail] = useState('')
   const [error, setError] = useState('')
   const totalSteps = registration ? 4 : 3
 
@@ -306,14 +352,14 @@ function Onboarding({ userEmail = '', onComplete, onRegister, busy, onSignOut, a
 
   function nextStep(event: FormEvent<HTMLFormElement>) {
     const values = readForm(event)
-    setAnswers((current) => ({ ...current, ...values }))
+    setAnswers((current) => ({ ...current, ...values, ...(values.termsAccepted === 'on' ? { termsAcceptedAt: new Date().toISOString() } : {}) }))
     setError('')
     setStep((current) => current + 1)
   }
 
   async function finish(event: FormEvent<HTMLFormElement>) {
     const values = readForm(event)
-    const completed = { ...answers, ...values } as OnboardingData
+    const completed = { ...answers, ...values, termsAcceptedAt: answers.termsAcceptedAt || new Date().toISOString() } as OnboardingData
     setAnswers(completed)
     setError('')
     try { await onComplete?.(completed) }
@@ -324,7 +370,7 @@ function Onboarding({ userEmail = '', onComplete, onRegister, busy, onSignOut, a
     const values = readForm(event)
     if (values.password !== values.confirmPassword) { setError('Las contraseñas no coinciden. Revísalas para continuar.'); return }
     const { confirmPassword: _confirmPassword, ...credentials } = values
-    const completed = { ...answers, ...credentials } as RegistrationData
+    const completed = { ...answers, ...credentials, termsAcceptedAt: answers.termsAcceptedAt || new Date().toISOString() } as RegistrationData
     setAnswers(completed)
     setError('')
     try { await onRegister?.(completed) }
@@ -353,9 +399,10 @@ function Onboarding({ userEmail = '', onComplete, onRegister, busy, onSignOut, a
       </form>}
       {step === 3 && <form className="onboarding-form" onSubmit={registration ? nextStep : finish}>
         <div className="onboarding-title"><span className="onboarding-icon"><Sparkles size={20} /></span><h1 id="onboarding-title">¿En qué te gustaría avanzar?</h1><p>Estas respuestas darán contexto a futuras ayudas de IA. Puedes cambiar tus preferencias después.</p></div>
-        <label>¿Qué te cuesta más hoy?<select name="mainChallenge" required defaultValue={answers.mainChallenge || ''}><option value="" disabled>Elige lo más importante</option><option value="know_profit">Saber cuánto estoy ganando realmente</option><option value="recording">Mantener ingresos y gastos al día</option><option value="separation">Separar la plata personal y la del negocio</option><option value="payments">Prepararme para pagos y deudas</option><option value="inventory">Controlar productos, materiales o compras</option><option value="starting">Planificar antes de empezar</option><option value="other">Otra cosa</option></select></label>
+        <label>¿Qué te cuesta más hoy?<select name="mainChallenge" required value={mainChallenge || answers.mainChallenge || ''} onChange={(event) => { setMainChallenge(event.target.value); if (event.target.value !== 'other') setMainChallengeDetail('') }}><option value="" disabled>Elige lo más importante</option><option value="know_profit">Saber cuánto estoy ganando realmente</option><option value="recording">Mantener ingresos y gastos al día</option><option value="separation">Separar la plata personal y la del negocio</option><option value="payments">Prepararme para pagos y deudas</option><option value="inventory">Controlar productos, materiales o compras</option><option value="starting">Planificar antes de empezar</option><option value="other">Otra cosa</option></select></label>
+        {(mainChallenge || answers.mainChallenge) === 'other' && <label className="onboarding-other-challenge">¿Qué otra cosa te cuesta más en tu negocio?<input name="mainChallengeDetail" value={mainChallengeDetail || answers.mainChallengeDetail || ''} onChange={(event) => setMainChallengeDetail(event.target.value)} placeholder="Cuéntanos brevemente" maxLength={180} required /></label>}
         <div className="onboarding-row"><label>¿Qué te sería más útil?<select name="mainGoal" required defaultValue={answers.mainGoal || ''}><option value="" disabled>Elige una prioridad</option><option value="organize">Tener todo ordenado en un lugar</option><option value="profit">Entender ingresos, gastos y ganancia</option><option value="cash">Saber cuánto puedo usar o reservar</option><option value="payments">No olvidar pagos próximos</option><option value="accountant">Compartir información con mi contador</option><option value="start_plan">Armar un plan paso a paso</option></select></label><label>¿Cómo preferirías anotar un movimiento?<select name="preferredEntry" required defaultValue={answers.preferredEntry || ''}><option value="" disabled>Elige cómo te acomoda</option><option value="form">Un formulario o tabla</option><option value="chat">Escribirlo en un chat</option><option value="voice">Dictarlo con mi voz</option><option value="automatic">Que se registre automáticamente</option><option value="unsure">Todavía no estoy seguro/a</option></select></label></div>
-        <label className="ai-consent"><input name="aiConsent" type="checkbox" required /><span><b>Autorizo que este contexto se use para personalizar futuras respuestas de IA.</b><small>Por ahora FinanzIA no enviará estas respuestas a un modelo de IA. No pedimos RUT, claves ni datos bancarios.</small></span></label>
+        <div className="terms-acceptance"><label className="terms-check"><input name="termsAccepted" type="checkbox" required defaultChecked={Boolean(answers.termsAcceptedAt)} /><span>Autorizo el tratamiento de mis datos para gestionar mi cuenta y usar FinanzIA, según la política de privacidad, y acepto los términos de uso.</span></label><a href="/terminos-y-condiciones" target="_blank" rel="noopener noreferrer">Leer términos y política de privacidad en otra pestaña <ArrowRight size={14} /></a></div>
         {error && <p className="onboarding-error" role="alert">{error}</p>}
         <div className="onboarding-footer"><button className="back-step" type="button" onClick={() => setStep(2)}><ChevronLeft size={16} /> Atrás</button><span>3 de 0{totalSteps}</span><button className="button button-primary" type="submit" disabled={busy}>{registration ? 'Continuar' : busy ? 'Guardando tu espacio…' : 'Guardar mi perfil'} <ArrowRight size={16} /></button></div>
       </form>}
