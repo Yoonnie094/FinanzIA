@@ -250,9 +250,7 @@ function Landing({ dark, toggleTheme, appearance, adjustTextScale, toggleGraysca
         <div className="hero-concept" role="img" aria-label="Ilustración conceptual: FinanzIA ordena movimientos, aclara la situación del negocio y sugiere próximos pasos">
           <div className="concept-orbit concept-orbit-one" /><div className="concept-orbit concept-orbit-two" />
           <article className="concept-node concept-node-input"><span className="concept-node-icon lavender-icon"><ClipboardList size={23} /></span><b>Lo que pasa</b><small>Ventas · compras · pagos</small><div className="concept-lines"><i /><i /><i /></div></article>
-          <span className="concept-arrow concept-arrow-one"><ArrowRight size={22} /></span>
           <article className="concept-node concept-node-clarity"><span className="concept-node-icon peach-icon"><BarChart3 size={23} /></span><b>Más orden</b><small>Tu negocio, más claro</small><div className="concept-bars"><i /><i /><i /><i /><i /><i /></div></article>
-          <span className="concept-arrow concept-arrow-two"><ArrowRight size={22} /></span>
           <article className="concept-node concept-node-next"><span className="concept-node-icon mint-icon"><Sparkles size={22} /></span><b>Un próximo paso</b><small>Ideas simples para avanzar</small></article>
           <span className="hero-spark spark-one">✳</span><span className="hero-spark spark-two">✦</span>
         </div>
