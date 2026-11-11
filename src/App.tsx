@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
-import { ArrowDownLeft, ArrowLeft, ArrowRight, ArrowUpRight, BarChart3, Bell, Check, ChevronDown, ChevronLeft, CircleHelp, ClipboardList, CreditCard, Eye, FileDown, HeartHandshake, Leaf, LockKeyhole, Menu, Moon, Plus, ShieldCheck, Sparkles, Store, Sun, Wallet, X } from 'lucide-react'
+import { ArrowDownLeft, ArrowLeft, ArrowRight, ArrowUpRight, BarChart3, Bell, Check, ChevronDown, ChevronLeft, CircleHelp, ClipboardList, CreditCard, Eye, FileDown, LockKeyhole, Menu, Moon, Plus, ShieldCheck, Sparkles, Store, Sun, Wallet, X } from 'lucide-react'
 import { incomeCategories, expenseCategories, initialMovements, type Movement, type MovementType } from './types'
 import { loadMovements, saveMovement } from './lib/movements'
 import { supabase, supabaseConfigured } from './lib/supabase'
@@ -255,7 +255,6 @@ function Landing({ dark, toggleTheme, appearance, adjustTextScale, toggleGraysca
           <span className="hero-spark spark-one">✳</span><span className="hero-spark spark-two">✦</span>
         </div>
       </section>
-      <section className="trust-strip"><div className="wrap trust-inner"><span>Un espacio simple para llevar</span><b><BarChart3 size={16} /> tus cuentas claras</b><i /><b><HeartHandshake size={16} /> tu negocio en marcha</b><i /><b><Leaf size={16} /> tu próximo paso</b></div></section>
       <section className="section how-section" id="como-funciona"><div className="wrap"><div className="section-heading"><div className="eyebrow">SIMPLE, COMO DEBERÍA SER</div><h2>De los movimientos del día<br />a una visión más clara.</h2><p>Sin planillas interminables. Sin palabras complicadas. Solo lo que necesitas para llevar las cuentas de tu negocio.</p></div>
         <div className="steps-grid"><article className="step-card"><span className="step-number">01</span><div className="step-icon lavender-icon"><ClipboardList size={22} /></div><h3>Anota lo que pasa</h3><p>Registra tus ingresos y gastos desde el teléfono o computador. Tú eliges cómo ordenar cada movimiento.</p><div className="step-visual concept-mini mini-register" role="img" aria-label="Ilustración de registro de una venta, una compra y un pago"><span className="mini-flow-item"><ArrowDownLeft size={15} /> Venta</span><span className="mini-flow-item"><ArrowUpRight size={15} /> Compra</span><span className="mini-flow-item"><CreditCard size={15} /> Pago</span></div></article>
           <article className="step-card"><span className="step-number">02</span><div className="step-icon peach-icon"><Eye size={22} /></div><h3>Mira el panorama completo</h3><p>Revisa cuánto entró y salió, qué pagos vienen y qué resultado dejan tus movimientos.</p><div className="step-visual concept-mini mini-summary" role="img" aria-label="Ilustración de ingresos y gastos que forman una vista general"><span>Ingresos</span><i /><span>Gastos</span><i /><b><Eye size={16} /> Vista clara del negocio</b></div></article>
