@@ -1,6 +1,6 @@
 # FinanzIA MVP
 
-Primera experiencia de FinanzIA: una landing pública y un panel de demostración para ordenar ingresos, gastos y próximos pagos con una identidad morada cercana.
+FinanzIA presenta cómo ayuda a ordenar ingresos, gastos y próximos pagos de una PYME. La página explica el recorrido con ilustraciones conceptuales y dirige al registro; no incluye acceso a un panel de muestra ni movimientos ficticios.
 
 ## Ejecutar en desarrollo
 
@@ -9,7 +9,7 @@ npm install
 npm run dev
 ```
 
-El demo funciona sin credenciales. Los movimientos se guardan localmente en el navegador y se pueden exportar a CSV.
+La landing se puede revisar sin credenciales. Para crear una cuenta, iniciar sesión y guardar datos se necesita configurar Supabase.
 
 ## Conexión Supabase
 
@@ -25,17 +25,17 @@ El enlace de acceso confirma la sesión en `/auth/callback`; desde ahí, la app 
 
 En Supabase Auth configura como **Site URL** `https://finanzia-orcin.vercel.app` y agrega a **Redirect URLs** `https://finanzia-orcin.vercel.app/auth/callback` y `http://localhost:5173/auth/callback`. Pega las plantillas para **Magic Link** y **Confirm signup** desde los archivos HTML indicados. Esta configuración debe quedar aplicada en el dashboard para que el proveedor mande los correos con la nueva identidad y no redirija al dominio anterior.
 
-Sin iniciar sesión, el demo guarda movimientos localmente. Con sesión autenticada, los movimientos se leen y escriben en Supabase según el RLS del usuario.
+Con sesión autenticada, los movimientos se leen y escriben en Supabase según el RLS del usuario. El espacio parte vacío y muestra estados de inicio hasta que se registren datos propios.
 
 ## Alcance de esta versión
 
 - Landing page de FinanzIA.
-- Resumen demostrativo con ingresos, gastos, caja estimada y pagos próximos de ejemplo.
+- Resumen de ingresos, gastos y pagos a partir de registros propios.
 - Alta de movimientos con categorías iniciales editables en el código.
 - Vista de movimientos y exportación CSV.
 - Modo claro y oscuro.
 - Tema que puede seguir la preferencia de luz del dispositivo.
-- Ajustes de accesibilidad: escala de lectura, escala de grises y preferencias guardadas en el navegador.
+- Controles A− y A+ para ajustar el tamaño de lectura y un botón circular mitad negro/mitad blanco para activar la escala de grises.
 - Navegación adaptable para teléfonos, tabletas y escritorio, con menú móvil y controles táctiles ampliados.
 - Cliente Supabase y acceso por enlace de correo.
 - Registro guiado con contexto de negocio preparado para futuras funciones de IA.

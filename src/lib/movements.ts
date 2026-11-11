@@ -5,7 +5,12 @@ const STORAGE_KEY = 'finanzia.movements.v1'
 
 function localMovements(): Movement[] {
   const saved = localStorage.getItem(STORAGE_KEY)
-  if (saved) return JSON.parse(saved) as Movement[]
+  if (saved) {
+    const movements = JSON.parse(saved) as Movement[]
+    const realMovements = movements.filter((movement) => !movement.id.startsWith('demo-'))
+    if (realMovements.length !== movements.length) localStorage.setItem(STORAGE_KEY, JSON.stringify(realMovements))
+    return realMovements
+  }
   localStorage.setItem(STORAGE_KEY, JSON.stringify(initialMovements))
   return initialMovements
 }
