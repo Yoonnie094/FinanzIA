@@ -11,6 +11,8 @@ type View = 'landing' | 'onboarding' | WorkspaceView
 type Modal = 'movement' | 'signin' | null
 type AccessMode = 'register' | 'login'
 
+const AUTH_CALLBACK_PATH = '/auth/callback'
+
 const clp = new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 })
 const shortDate = (date: string) => new Intl.DateTimeFormat('es-CL', { day: 'numeric', month: 'short' }).format(new Date(`${date}T12:00:00`))
 const todayISO = () => new Date().toLocaleDateString('sv-SE')
@@ -33,8 +35,24 @@ function App() {
 
   useEffect(() => { document.documentElement.dataset.theme = dark ? 'dark' : 'light'; localStorage.setItem('finanzia.theme', dark ? 'dark' : 'light') }, [dark])
   useEffect(() => {
+    const url = new URL(window.location.href)
+    const hashParams = new URLSearchParams(url.hash.replace(/^#/, ''))
+    const authError = url.searchParams.get('error_description') ?? hashParams.get('error_description')
+    const authErrorCode = url.searchParams.get('error_code') ?? hashParams.get('error_code')
+    if (authError || authErrorCode) {
+      window.history.replaceState({}, '', '/')
+      setView('landing')
+      setAccessMode('login')
+      setModal('signin')
+      setNotice(authErrorCode === 'otp_expired'
+        ? 'Este enlace venció o ya fue usado. Inicia sesión para pedir uno nuevo.'
+        : 'No pudimos validar el enlace. Inicia sesión para recibir uno nuevo.')
+    }
+  }, [])
+  useEffect(() => {
     if (!supabase) return
     supabase.auth.getSession().then(({ data }) => {
+      if (window.location.pathname === AUTH_CALLBACK_PATH) window.history.replaceState({}, '', '/')
       setUserEmail(data.session?.user.email ?? null)
       setAuthUserId(data.session?.user.id ?? null)
     })
@@ -84,7 +102,8 @@ function App() {
     if (!supabase) return
     const email = String(new FormData(event.currentTarget).get('email'))
     setBusy(true)
-    const { error } = await supabase.auth.signInWithOtp({ email, options: { shouldCreateUser: accessMode === 'register', emailRedirectTo: window.location.origin } })
+    const callbackUrl = new URL(AUTH_CALLBACK_PATH, window.location.origin).toString()
+    const { error } = await supabase.auth.signInWithOtp({ email, options: { shouldCreateUser: accessMode === 'register', emailRedirectTo: callbackUrl } })
     setBusy(false)
     if (error) setNotice(error.message)
     else { setModal(null); setNotice(accessMode === 'register' ? 'Te enviamos el enlace para crear tu cuenta.' : 'Te enviamos el enlace para entrar a tu cuenta.') }

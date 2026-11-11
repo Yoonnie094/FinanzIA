@@ -19,7 +19,9 @@ El proyecto ya tiene tablas `profiles`, `businesses` y `transactions`, protegida
 
 El registro usa enlace seguro por correo; Supabase crea la cuenta al confirmar el enlace. Después, un onboarding de tres pasos guarda el nombre del usuario, nombre/rubro/etapa del negocio, tamaño del equipo, método de registro actual, uso de inventario, principal dificultad, objetivo y forma preferida de registrar movimientos. Región y comuna son opcionales. El consentimiento de personalización IA se guarda junto con contexto `es-CL` y `CLP`; todavía no se envía este contexto a ningún modelo. No se solicitan RUT, claves, datos bancarios ni montos financieros.
 
-Para completar el acceso en producción, agrega el dominio publicado a las URLs permitidas de redirección de Supabase Auth (y `http://localhost:5173` para pruebas locales).
+El enlace de acceso confirma la sesión en `/auth/callback`; desde ahí, la app dirige al onboarding cuando es el primer ingreso o al panel si el perfil ya está completo. Los errores por enlaces vencidos vuelven al acceso con un aviso y la opción de pedir un enlace nuevo. La plantilla visual y los pasos de configuración de Auth están en `supabase/templates/` y `supabase/auth_email_setup.md`.
+
+En Supabase Auth configura como **Site URL** `https://finanzia-orcin.vercel.app` y agrega a **Redirect URLs** `https://finanzia-orcin.vercel.app/auth/callback` y `http://localhost:5173/auth/callback`. Pega las plantillas para **Magic Link** y **Confirm signup** desde los archivos HTML indicados. Esta configuración debe quedar aplicada en el dashboard para que el proveedor mande los correos con la nueva identidad y no redirija al dominio anterior.
 
 Sin iniciar sesión, el demo guarda movimientos localmente. Con sesión autenticada, los movimientos se leen y escriben en Supabase según el RLS del usuario.
 
