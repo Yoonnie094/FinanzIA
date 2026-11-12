@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
-import { ArrowDownLeft, ArrowLeft, ArrowRight, ArrowUpRight, BarChart3, Bell, Check, ChevronDown, ChevronLeft, CircleHelp, ClipboardList, CreditCard, Eye, FileDown, LockKeyhole, Menu, Moon, Plus, ShieldCheck, Sparkles, Store, Sun, Wallet, X } from 'lucide-react'
+import { ArrowDownLeft, ArrowLeft, ArrowRight, ArrowUpRight, BarChart3, Bell, Check, ChevronDown, ChevronLeft, CircleHelp, ClipboardList, CreditCard, Eye, EyeOff, FileDown, LockKeyhole, Menu, Moon, Plus, ShieldCheck, Sparkles, Store, Sun, Wallet, X } from 'lucide-react'
 import { incomeCategories, expenseCategories, initialMovements, type Movement, type MovementType } from './types'
 import { loadMovements, saveMovement } from './lib/movements'
 import { supabase, supabaseConfigured } from './lib/supabase'
@@ -16,20 +16,20 @@ type Appearance = { theme: ThemeChoice; textScale: number; grayscale: boolean }
 const AUTH_CALLBACK_PATH = '/auth/callback'
 const requiredOnboardingFields: (keyof OnboardingData)[] = ['firstName', 'businessName', 'category', 'stage', 'teamSize', 'trackingMethod', 'hasInventory', 'mainChallenge', 'mainGoal', 'preferredEntry']
 
-const routes: Record<string, { view: View; modal?: Modal }> = {
-  '/': { view: 'landing' },
-  '/iniciar-sesion': { view: 'signin' },
-  '/registro': { view: 'registration' },
-  '/verificar-correo': { view: 'verification-pending' },
-  '/configurar-negocio': { view: 'onboarding' },
-  '/terminos-y-condiciones': { view: 'terms' },
-  '/app': { view: 'dashboard' },
-  '/movimientos': { view: 'movements' },
-  '/pagos': { view: 'payments' },
+const routes: Record<string, View> = {
+  '/': 'landing',
+  '/iniciar-sesion': 'signin',
+  '/registro': 'registration',
+  '/verificar-correo': 'verification-pending',
+  '/configurar-negocio': 'onboarding',
+  '/terminos-y-condiciones': 'terms',
+  '/app': 'dashboard',
+  '/movimientos': 'movements',
+  '/pagos': 'payments',
 }
 
 function resolveRoute(pathname: string) {
-  return routes[pathname] || routes['/']
+  return routes[pathname] || 'landing'
 }
 
 function pathForView(view: View) {
@@ -86,9 +86,9 @@ function TermsPage() {
 
       <section><h2>1. Quién presta el servicio y responde por los datos</h2><p>FinanzIA es un servicio en desarrollo para ayudar a pequeñas y medianas empresas a registrar y comprender información de su negocio.</p><dl className="legal-facts"><div><dt>Responsable del tratamiento</dt><dd>Javiera Angulo Barraza, creadora de FinanzIA.</dd></div><div><dt>Contacto para privacidad, consultas y solicitudes</dt><dd><a href="mailto:javiera.angulo2005@gmail.com">javiera.angulo2005@gmail.com</a></dd></div></dl><p>El correo anterior es el canal habilitado para solicitudes sobre datos personales. No se publica domicilio postal.</p></section>
 
-      <section><h2>2. Qué datos tratamos</h2><p>Según las funciones que uses, FinanzIA puede tratar:</p><ul><li><b>Cuenta:</b> correo electrónico, contraseña gestionada por Supabase Auth y datos necesarios para verificar el correo e iniciar sesión.</li><li><b>Perfil y contexto de la PYME:</b> nombre de la persona, nombre y rubro del negocio, etapa, tamaño del equipo, método de registro, si controla inventario, objetivos y desafíos indicados.</li><li><b>Ubicación y descripción:</b> región, comuna y descripción del negocio, que son opcionales cuando el formulario así lo indica.</li><li><b>Movimientos financieros ingresados:</b> tipo, descripción, categoría, monto en pesos chilenos y fecha.</li><li><b>Datos técnicos básicos:</b> sesión de cuenta y preferencias de visualización guardadas en el navegador. El alojamiento puede generar registros técnicos de conexión para operar y proteger el sitio.</li></ul><p>No solicites ni ingreses claves bancarias, números de tarjetas, RUT de terceros ni información sensible que no sea necesaria para llevar las cuentas de tu negocio.</p></section>
+      <section><h2>2. Qué datos tratamos</h2><p>Según las funciones que uses, FinanzIA puede tratar:</p><ul><li><b>Cuenta:</b> correo electrónico, contraseña gestionada por Supabase Auth y datos necesarios para verificar el correo e iniciar sesión.</li><li><b>Perfil y contexto de la PYME:</b> nombre de la persona, nombre y rubro del negocio, etapa, tamaño del equipo, método de registro, si controla inventario, objetivos y desafíos indicados.</li><li><b>Ubicación y descripción:</b> región, comuna y descripción del negocio.</li><li><b>Movimientos financieros ingresados:</b> tipo, descripción, categoría, monto en pesos chilenos y fecha.</li><li><b>Datos técnicos básicos:</b> sesión de cuenta y preferencias de visualización guardadas en el navegador. El alojamiento puede generar registros técnicos de conexión para operar y proteger el sitio.</li></ul><p>No solicites ni ingreses claves bancarias, números de tarjetas, RUT de terceros ni información sensible que no sea necesaria para llevar las cuentas de tu negocio.</p></section>
 
-      <section><h2>3. Para qué usamos la información</h2><p>Tratamos los datos para crear y proteger tu cuenta, verificar tu correo, guardar el perfil y los movimientos que ingresas, mostrar resúmenes del negocio, adaptar la experiencia a las respuestas del onboarding, mantener y proteger el servicio, y responder solicitudes de soporte o privacidad. No vendemos tus datos ni los usamos para publicidad personalizada.</p><p>Los campos marcados como opcionales pueden dejarse vacíos. Si no entregas datos necesarios para una función, esa función podría no estar disponible o no funcionar correctamente.</p></section>
+      <section><h2>3. Para qué usamos la información</h2><p>Tratamos los datos para crear y proteger tu cuenta, verificar tu correo, guardar el perfil y los movimientos que ingresas, mostrar resúmenes del negocio, adaptar la experiencia a las respuestas del onboarding, mantener y proteger el servicio, y responder solicitudes de soporte o privacidad. No vendemos tus datos ni los usamos para publicidad personalizada.</p><p>Los datos solicitados como obligatorios en el registro permiten construir el contexto de tu negocio y preparar futuras funciones de apoyo. Si no los entregas, no podrás completar el registro o usar las funciones que dependan de ellos.</p></section>
 
       <section><h2>4. Base y constancia del tratamiento</h2><p>En el registro se te solicita una autorización expresa para tratar los datos que entregas con el fin de crear y administrar tu cuenta, guardar el contexto de tu PYME y prestar las funciones que solicitas, junto con la aceptación de estos términos. La casilla no autoriza usos ajenos a esas finalidades. Conservamos la versión aceptada y la fecha y hora de aceptación como constancia electrónica. Puedes retirar tu autorización escribiendo al contacto indicado; esto no afecta la licitud del tratamiento previo y puede impedir funciones que dependan de esos datos.</p><p>Hasta el 30 de noviembre de 2026 rige el texto vigente de la Ley N.º 19.628. La Ley N.º 21.719, que modifica ese régimen, tiene entrada en vigor el 1 de diciembre de 2026. Esta política se redactó considerando ambas fechas y se actualizará si cambian las funciones, proveedores o finalidades.</p></section>
 
@@ -111,8 +111,8 @@ function TermsPage() {
 }
 
 function App() {
-  const [view, setView] = useState<View>(() => resolveRoute(window.location.pathname).view)
-  const [modal, setModal] = useState<Modal>(() => resolveRoute(window.location.pathname).modal || null)
+  const [view, setView] = useState<View>(() => resolveRoute(window.location.pathname))
+  const [modal, setModal] = useState<Modal>(null)
   const [movements, setMovements] = useState<Movement[]>(initialMovements)
   const [appearance, setAppearance] = useState<Appearance>(getSavedAppearance)
   const [systemDark, setSystemDark] = useState(() => window.matchMedia('(prefers-color-scheme: dark)').matches)
@@ -159,8 +159,8 @@ const toggleTheme = () => setAppearance((current) => ({ ...current, theme: curre
     if (!routes[window.location.pathname] && window.location.pathname !== AUTH_CALLBACK_PATH) window.history.replaceState({}, '', '/')
     const onPopState = () => {
       const route = resolveRoute(window.location.pathname)
-      setView(route.view)
-      setModal(route.modal || null)
+      setView(route)
+      setModal(null)
       setMobileMenu(false)
     }
     window.addEventListener('popstate', onPopState)
@@ -442,12 +442,12 @@ function Onboarding({ userEmail = '', onComplete, onRegister, busy, onSignOut, a
         <label>¿Cómo te llamas?<input name="firstName" required maxLength={60} defaultValue={answers.firstName} placeholder="Tu nombre" autoComplete="given-name" /></label>
         <label>¿Cómo se llama tu negocio?<input name="businessName" required maxLength={100} defaultValue={answers.businessName} placeholder="Nombre del negocio o proyecto" autoComplete="organization" /></label>
         <div className="onboarding-row"><label>¿A qué se dedica?<select name="category" required defaultValue={answers.category || ''}><option value="" disabled>Elige un rubro</option>{['Comercio y venta de productos', 'Servicios profesionales', 'Alimentos y gastronomía', 'Artesanía y producción', 'Belleza y cuidado personal', 'Transporte y delivery', 'Servicios técnicos y reparación', 'Otro'].map((item) => <option key={item}>{item}</option>)}</select></label><label>¿En qué etapa está?<select name="stage" required defaultValue={answers.stage || ''}><option value="" disabled>Elige una etapa</option><option value="idea">Estoy preparando una idea</option><option value="occasional">Vendo u ofrezco servicios ocasionalmente</option><option value="operating">El negocio ya está funcionando</option></select></label></div>
-        <div className="onboarding-row"><label>Región <span>(opcional)</span><select name="region" defaultValue={answers.region || ''}><option value="">Prefiero no indicarla</option>{regionsOfChile.map((region) => <option key={region}>{region}</option>)}</select></label><label>Comuna <span>(opcional)</span><input name="comuna" maxLength={80} defaultValue={answers.comuna} placeholder="Ej. Maipú" autoComplete="address-level2" /></label></div>
+        <div className="onboarding-row"><label>¿En qué región está tu negocio?<select name="region" required defaultValue={answers.region || ''}><option value="" disabled>Elige una región</option>{regionsOfChile.map((region) => <option key={region}>{region}</option>)}</select></label><label>¿En qué comuna está?<input name="comuna" required maxLength={80} defaultValue={answers.comuna} placeholder="Ej. Maipú" autoComplete="address-level2" /></label></div>
         <div className="onboarding-footer"><span>1 de 3 · toma cerca de 2 minutos</span><button className="button button-primary" type="submit">Continuar <ArrowRight size={16} /></button></div>
       </form>}
       {step === 2 && <form className="onboarding-form" onSubmit={nextStep}>
         <div className="onboarding-title"><span className="onboarding-icon"><Wallet size={20} /></span><h1 id="onboarding-title">Cuéntanos cómo funciona</h1><p>Así podremos dar ejemplos y sugerencias más cercanos a tu día a día.</p></div>
-        <label>¿Qué vendes o qué servicio ofreces? <span>(opcional)</span><textarea name="description" maxLength={220} defaultValue={answers.description} placeholder="Por ejemplo: preparo tortas por encargo o hago reparaciones de bicicletas." rows={3} /></label>
+        <label>¿Qué vendes o qué servicio ofreces?<textarea name="description" required maxLength={220} defaultValue={answers.description} placeholder="Por ejemplo: preparo tortas por encargo o hago reparaciones de bicicletas." rows={3} /></label>
         <div className="onboarding-row"><label>¿Cuántas personas trabajan en el negocio?<select name="teamSize" required defaultValue={answers.teamSize || ''}><option value="" disabled>Elige una opción</option><option value="solo">Solo yo</option><option value="2-5">2 a 5 personas</option><option value="6-10">6 a 10 personas</option><option value="11+">Más de 10 personas</option></select></label><label>¿Cómo llevas tus cuentas hoy?<select name="trackingMethod" required defaultValue={answers.trackingMethod || ''}><option value="" disabled>Elige una opción</option><option value="notebook">Cuaderno o papel</option><option value="spreadsheet">Excel o una planilla</option><option value="bank">Reviso mi cuenta o medio de pago</option><option value="memory">Lo recuerdo de memoria</option><option value="none">Todavía no llevo registro</option><option value="other">Otra aplicación o método</option></select></label></div>
         <fieldset className="choice-fieldset"><legend>¿Necesitas controlar productos o insumos?</legend><div className="choice-cards"><label className={answers.hasInventory === 'yes' ? 'choice-card selected' : 'choice-card'}><input type="radio" name="hasInventory" value="yes" required defaultChecked={answers.hasInventory === 'yes'} /><span><b>Sí</b><small>Productos o materiales</small></span></label><label className={answers.hasInventory === 'no' ? 'choice-card selected' : 'choice-card'}><input type="radio" name="hasInventory" value="no" required defaultChecked={answers.hasInventory === 'no'} /><span><b>No</b><small>Solo servicios u otro</small></span></label></div></fieldset>
         <div className="onboarding-footer"><button className="back-step" type="button" onClick={() => setStep(1)}><ChevronLeft size={16} /> Atrás</button><span>2 de 3</span><button className="button button-primary" type="submit">Continuar <ArrowRight size={16} /></button></div>
@@ -464,7 +464,7 @@ function Onboarding({ userEmail = '', onComplete, onRegister, busy, onSignOut, a
       {registration && step === 4 && <form className="onboarding-form" onSubmit={finishRegistration}>
         <div className="onboarding-title"><span className="onboarding-icon"><LockKeyhole size={20} /></span><h1 id="onboarding-title">Ya sabemos más de tu negocio</h1><p>Ahora crea tu acceso. Al terminar, enviaremos un enlace para verificar tu correo.</p></div>
         <label>Correo electrónico<input name="email" type="email" required autoComplete="email" placeholder="tu@negocio.cl" /></label>
-        <div className="onboarding-row"><label>Contraseña<input name="password" type="password" required minLength={8} autoComplete="new-password" placeholder="Al menos 8 caracteres" /></label><label>Repite tu contraseña<input name="confirmPassword" type="password" required minLength={8} autoComplete="new-password" placeholder="Escríbela nuevamente" /></label></div>
+        <div className="onboarding-row"><PasswordField name="password" label="Contraseña" autoComplete="new-password" placeholder="Al menos 8 caracteres" minLength={8} /><PasswordField name="confirmPassword" label="Repite tu contraseña" autoComplete="new-password" placeholder="Escríbela nuevamente" minLength={8} /></div>
         {!configured && <p className="onboarding-error" role="alert">El acceso aún no está conectado. Tus respuestas no se enviarán hasta completar esta configuración.</p>}
         {error && <p className="onboarding-error" role="alert">{error}</p>}
         <div className="onboarding-footer"><button className="back-step" type="button" onClick={() => { setError(''); setStep(3) }}><ChevronLeft size={16} /> Atrás</button><span>4 de 04</span><button className="button button-primary" type="submit" disabled={busy || !configured}>{busy ? 'Creando tu cuenta…' : 'Crear cuenta y verificar correo'} <ArrowRight size={16} /></button></div>
@@ -494,7 +494,12 @@ function MovementModal({ onClose, onSubmit, busy }: { onClose: () => void; onSub
 }
 
 function SignInModal({ onClose, onSubmit, onRegister, busy, configured }: { onClose: () => void; onSubmit: (event: FormEvent<HTMLFormElement>) => void; onRegister: () => void; busy: boolean; configured: boolean }) {
-  return <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}><section className="modal-card signin-card" role="dialog" aria-modal="true" aria-labelledby="signin-title"><div className="modal-head"><div><span className="modal-kicker">QUÉ BUENO TENERTE DE VUELTA</span><h2 id="signin-title">Entra a tu espacio</h2></div><button className="icon-btn" onClick={onClose} aria-label="Cerrar"><X size={18} /></button></div>{configured ? <form onSubmit={onSubmit}><p className="signin-copy">Ingresa con el correo y la contraseña que elegiste al crear tu cuenta.</p><label>Correo electrónico<input name="email" type="email" placeholder="tu@negocio.cl" autoComplete="email" required /></label><label>Contraseña<input name="password" type="password" autoComplete="current-password" required /></label><button className="button button-primary signin-submit" disabled={busy}>{busy ? 'Ingresando…' : 'Iniciar sesión'} <ArrowRight size={15} /></button><div className="modal-note"><ShieldCheck size={16} /><span>Tu negocio y su contexto quedan guardados en tu cuenta.</span></div><p className="signin-copy signin-register">¿Primera vez? <button type="button" className="text-button" onClick={() => { onClose(); onRegister() }}>Cuéntanos de tu negocio y crea tu cuenta</button></p></form> : <div className="setup-state"><span className="setup-icon"><ShieldCheck size={21} /></span><h3>Tu espacio se está preparando</h3><p>Cuando conectes tu proyecto de Supabase, podrás iniciar sesión y guardar tus movimientos de forma segura.</p><button className="button button-primary" onClick={onClose}>Entendido</button></div>}</section></div>
+  return <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}><section className="modal-card signin-card" role="dialog" aria-modal="true" aria-labelledby="signin-title"><div className="modal-head"><div><span className="modal-kicker">QUÉ BUENO TENERTE DE VUELTA</span><h2 id="signin-title">Entra a tu espacio</h2></div><button className="icon-btn" onClick={onClose} aria-label="Cerrar"><X size={18} /></button></div>{configured ? <form onSubmit={onSubmit}><p className="signin-copy">Ingresa con el correo y la contraseña que elegiste al crear tu cuenta.</p><label>Correo electrónico<input name="email" type="email" placeholder="tu@negocio.cl" autoComplete="email" required /></label><PasswordField name="password" label="Contraseña" autoComplete="current-password" /><button className="button button-primary signin-submit" disabled={busy}>{busy ? 'Ingresando…' : 'Iniciar sesión'} <ArrowRight size={15} /></button><div className="modal-note"><ShieldCheck size={16} /><span>Tu negocio y su contexto quedan guardados en tu cuenta.</span></div><p className="signin-copy signin-register">¿Primera vez? <button type="button" className="text-button" onClick={() => { onClose(); onRegister() }}>Cuéntanos de tu negocio y crea tu cuenta</button></p></form> : <div className="setup-state"><span className="setup-icon"><ShieldCheck size={21} /></span><h3>Tu espacio se está preparando</h3><p>Cuando conectes tu proyecto de Supabase, podrás iniciar sesión y guardar tus movimientos de forma segura.</p><button className="button button-primary" onClick={onClose}>Entendido</button></div>}</section></div>
+}
+
+function PasswordField({ name, label, autoComplete, placeholder, minLength }: { name: string; label: string; autoComplete: string; placeholder?: string; minLength?: number }) {
+  const [visible, setVisible] = useState(false)
+  return <label>{label}<span className="password-control"><input name={name} type={visible ? 'text' : 'password'} autoComplete={autoComplete} placeholder={placeholder} minLength={minLength} required /><button className="password-toggle" type="button" onClick={() => setVisible((shown) => !shown)} aria-label={visible ? 'Ocultar contraseña' : 'Mostrar contraseña'} aria-pressed={visible} title={visible ? 'Ocultar contraseña' : 'Mostrar contraseña'}>{visible ? <EyeOff size={19} aria-hidden="true" /> : <Eye size={19} aria-hidden="true" />}</button></span></label>
 }
 
 function exportCSV(movements: Movement[]) {
