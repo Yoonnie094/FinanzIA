@@ -292,6 +292,10 @@
 .signin-card .signin-register .text-button{font-size:14px}
 .signin-card .setup-state h3{font-size:20px}
 .signin-card .setup-state p{max-width:400px;font-size:15px;line-height:1.6}
+.auth-page{position:relative;min-height:100svh;display:grid;place-items:center;padding:32px 20px;background:radial-gradient(ellipse at 50% 0,rgba(218,201,237,.3),transparent 42%),var(--bg)}
+.auth-brand{position:absolute;top:28px;left:max(24px,calc((100vw - 1040px)/2));font-size:20px}
+.auth-page .modal-backdrop{position:static;inset:auto;width:min(100%,560px);min-height:auto;padding:24px;background:transparent;backdrop-filter:none}
+.auth-page .signin-card{width:100%;max-height:none;box-shadow:var(--shadow)}
 @media(max-width:620px){.modal-backdrop{padding:12px}.signin-card{width:100%;max-height:calc(100dvh - 24px);padding:24px 20px;border-radius:18px}.signin-card .modal-head h2{font-size:25px}.signin-card .signin-copy{font-size:14px}.signin-card .signin-register{align-items:flex-start;font-size:13px}.signin-card .signin-register .text-button{font-size:13px;text-align:left}}
 .terms-acceptance{display:grid;gap:10px;padding:15px;border:1px solid var(--line);border-radius:11px;background:var(--surface-soft)}
 .onboarding-form label.terms-check{display:grid;grid-template-columns:20px minmax(0,1fr);align-items:start;gap:11px;margin:0;color:var(--text);font-size:14px;line-height:1.5;cursor:pointer}

@@ -7,14 +7,42 @@ import { supabase, supabaseConfigured } from './lib/supabase'
 import { FINANZIA_TERMS_VERSION, hasCompletedOnboarding, saveOnboarding, type OnboardingData } from './lib/onboarding'
 
 type WorkspaceView = 'dashboard' | 'movements' | 'payments'
-type View = 'landing' | 'registration' | 'verification-pending' | 'onboarding' | 'terms' | WorkspaceView
-type Modal = 'movement' | 'signin' | null
+type View = 'landing' | 'signin' | 'registration' | 'verification-pending' | 'onboarding' | 'terms' | WorkspaceView
+type Modal = 'movement' | null
 type RegistrationData = OnboardingData & { email: string; password: string }
 type ThemeChoice = 'system' | 'light' | 'dark'
 type Appearance = { theme: ThemeChoice; textScale: number; grayscale: boolean }
 
 const AUTH_CALLBACK_PATH = '/auth/callback'
 const requiredOnboardingFields: (keyof OnboardingData)[] = ['firstName', 'businessName', 'category', 'stage', 'teamSize', 'trackingMethod', 'hasInventory', 'mainChallenge', 'mainGoal', 'preferredEntry']
+
+const routes: Record<string, { view: View; modal?: Modal }> = {
+  '/': { view: 'landing' },
+  '/iniciar-sesion': { view: 'signin' },
+  '/registro': { view: 'registration' },
+  '/verificar-correo': { view: 'verification-pending' },
+  '/configurar-negocio': { view: 'onboarding' },
+  '/terminos-y-condiciones': { view: 'terms' },
+  '/app': { view: 'dashboard' },
+  '/movimientos': { view: 'movements' },
+  '/pagos': { view: 'payments' },
+}
+
+function resolveRoute(pathname: string) {
+  return routes[pathname] || routes['/']
+}
+
+function pathForView(view: View) {
+  if (view === 'landing') return '/'
+  if (view === 'signin') return '/iniciar-sesion'
+  if (view === 'registration') return '/registro'
+  if (view === 'verification-pending') return '/verificar-correo'
+  if (view === 'onboarding') return '/configurar-negocio'
+  if (view === 'terms') return '/terminos-y-condiciones'
+  if (view === 'dashboard') return '/app'
+  if (view === 'movements') return '/movimientos'
+  return '/pagos'
+}
 
 function isOnboardingData(value: unknown): value is OnboardingData {
   if (!value || typeof value !== 'object') return false
@@ -83,8 +111,8 @@ function TermsPage() {
 }
 
 function App() {
-  const [view, setView] = useState<View>(() => window.location.pathname === '/terminos-y-condiciones' ? 'terms' : 'landing')
-  const [modal, setModal] = useState<Modal>(null)
+  const [view, setView] = useState<View>(() => resolveRoute(window.location.pathname).view)
+  const [modal, setModal] = useState<Modal>(() => resolveRoute(window.location.pathname).modal || null)
   const [movements, setMovements] = useState<Movement[]>(initialMovements)
   const [appearance, setAppearance] = useState<Appearance>(getSavedAppearance)
   const [systemDark, setSystemDark] = useState(() => window.matchMedia('(prefers-color-scheme: dark)').matches)
@@ -119,13 +147,24 @@ const toggleTheme = () => setAppearance((current) => ({ ...current, theme: curre
     const authError = url.searchParams.get('error_description') ?? hashParams.get('error_description')
     const authErrorCode = url.searchParams.get('error_code') ?? hashParams.get('error_code')
     if (authError || authErrorCode) {
-      window.history.replaceState({}, '', '/')
-      setView('landing')
-      setModal('signin')
+      window.history.replaceState({}, '', '/iniciar-sesion')
+      setView('signin')
+      setModal(null)
       setNotice(authErrorCode === 'otp_expired'
         ? 'Este enlace venció o ya fue usado. Inicia sesión para pedir uno nuevo.'
         : 'No pudimos validar el enlace. Inicia sesión para recibir uno nuevo.')
     }
+  }, [])
+  useEffect(() => {
+    if (!routes[window.location.pathname] && window.location.pathname !== AUTH_CALLBACK_PATH) window.history.replaceState({}, '', '/')
+    const onPopState = () => {
+      const route = resolveRoute(window.location.pathname)
+      setView(route.view)
+      setModal(route.modal || null)
+      setMobileMenu(false)
+    }
+    window.addEventListener('popstate', onPopState)
+    return () => window.removeEventListener('popstate', onPopState)
   }, [])
   useEffect(() => {
     if (!supabase) return
@@ -133,6 +172,11 @@ const toggleTheme = () => setAppearance((current) => ({ ...current, theme: curre
       if (window.location.pathname === AUTH_CALLBACK_PATH) window.history.replaceState({}, '', '/')
       setUserEmail(data.session?.user.email ?? null)
       setAuthUserId(data.session?.user.id ?? null)
+      if (!data.session && ['/app', '/movimientos', '/pagos', '/configurar-negocio'].includes(window.location.pathname)) {
+        window.history.replaceState({}, '', '/iniciar-sesion')
+        setView('signin')
+        setModal(null)
+      }
     })
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       setUserEmail(session?.user.email ?? null)
@@ -155,7 +199,13 @@ const toggleTheme = () => setAppearance((current) => ({ ...current, theme: curre
         }
       }
       if (!active) return
-      setView((current) => ['landing', 'registration', 'verification-pending', 'onboarding'].includes(current) ? complete ? 'dashboard' : 'onboarding' : current)
+      const currentPath = window.location.pathname
+      if (['/', '/iniciar-sesion', '/registro', '/verificar-correo', '/configurar-negocio'].includes(currentPath)) {
+        const next: View = complete ? 'dashboard' : 'onboarding'
+        window.history.replaceState({}, '', pathForView(next))
+        setModal(null)
+        setView(next)
+      }
     }
     routeAuthenticatedUser().catch((error: Error) => { if (active) setNotice(error.message || 'No pudimos revisar tu perfil.') })
     return () => { active = false }
@@ -223,10 +273,10 @@ const toggleTheme = () => setAppearance((current) => ({ ...current, theme: curre
       if (result.session && result.user) {
         setUserEmail(email)
         setAuthUserId(result.user.id)
-        setView('onboarding')
+        navigate('onboarding')
       } else {
         setPendingEmail(email)
-        setView('verification-pending')
+        navigate('verification-pending')
       }
     } finally { setBusy(false) }
   }
@@ -236,7 +286,7 @@ const toggleTheme = () => setAppearance((current) => ({ ...current, theme: curre
     setBusy(true)
     try {
       await saveOnboarding(authUserId, userEmail, answers)
-      setView('dashboard')
+      navigate('dashboard')
       setNotice('Tu espacio quedó listo. ¡Bienvenido/a a FinanzIA!')
     } finally { setBusy(false) }
   }
@@ -245,21 +295,26 @@ const toggleTheme = () => setAppearance((current) => ({ ...current, theme: curre
     if (!supabase) return
     const { error } = await supabase.auth.signOut()
     if (error) setNotice(error.message)
-    else { setNotice('Sesión cerrada'); setMovements(initialMovements); setView('landing') }
+    else { setNotice('Sesión cerrada'); setMovements(initialMovements); navigate('landing') }
   }
 
-  function openAccess() { setModal('signin') }
+  function openAccess() { navigate('signin') }
 
-  function navigate(next: View) { setView(next); setMobileMenu(false); window.scrollTo({ top: 0, behavior: 'smooth' }) }
+  function navigate(next: View) {
+    window.history.pushState({}, '', pathForView(next))
+    setView(next)
+    setModal(null)
+    setMobileMenu(false)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
 
   return <>
-    {view === 'terms' ? <TermsPage /> : view === 'landing' ? <Landing dark={dark} toggleTheme={toggleTheme} appearance={appearance} adjustTextScale={adjustTextScale} toggleGrayscale={toggleGrayscale} openSignIn={openAccess} openRegister={() => navigate('registration')} /> :
+    {view === 'terms' ? <TermsPage /> : view === 'signin' ? <main className="auth-page"><a className="auth-brand" href="/"><Brand /></a><SignInModal onClose={() => navigate('landing')} onSubmit={signIn} onRegister={() => navigate('registration')} busy={busy} configured={supabaseConfigured} /></main> : view === 'landing' ? <Landing dark={dark} toggleTheme={toggleTheme} appearance={appearance} adjustTextScale={adjustTextScale} toggleGrayscale={toggleGrayscale} openSignIn={openAccess} openRegister={() => navigate('registration')} /> :
       view === 'registration' ? <Onboarding registration configured={supabaseConfigured} onRegister={registerUser} busy={busy} onSignOut={() => navigate('landing')} appearance={appearance} adjustTextScale={adjustTextScale} toggleGrayscale={toggleGrayscale} /> :
-      view === 'verification-pending' ? <VerificationPending email={pendingEmail} onBack={() => navigate('landing')} onSignIn={() => { setView('landing'); openAccess() }} appearance={appearance} adjustTextScale={adjustTextScale} toggleGrayscale={toggleGrayscale} /> :
+      view === 'verification-pending' ? <VerificationPending email={pendingEmail} onBack={() => navigate('landing')} onSignIn={openAccess} appearance={appearance} adjustTextScale={adjustTextScale} toggleGrayscale={toggleGrayscale} /> :
       view === 'onboarding' ? <Onboarding userEmail={userEmail || ''} onComplete={finishOnboarding} busy={busy} onSignOut={signOut} configured={supabaseConfigured} appearance={appearance} adjustTextScale={adjustTextScale} toggleGrayscale={toggleGrayscale} /> :
       <Workspace view={view} navigate={navigate} movements={movements} openMovement={() => setModal('movement')} dark={dark} toggleTheme={toggleTheme} appearance={appearance} adjustTextScale={adjustTextScale} toggleGrayscale={toggleGrayscale} userEmail={userEmail} openSignIn={openAccess} signOut={signOut} mobileMenu={mobileMenu} setMobileMenu={setMobileMenu} />}
     {modal === 'movement' && <MovementModal onClose={() => setModal(null)} onSubmit={addMovement} busy={busy} />}
-    {modal === 'signin' && <SignInModal onClose={() => setModal(null)} onSubmit={signIn} onRegister={() => navigate('registration')} busy={busy} configured={supabaseConfigured} />}
     {notice && <div className="toast"><Check size={16} />{notice}<button onClick={() => setNotice('')} aria-label="Cerrar aviso"><X size={14} /></button></div>}
   </>
 }
